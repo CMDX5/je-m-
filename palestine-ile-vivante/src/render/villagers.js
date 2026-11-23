@@ -409,17 +409,23 @@ export class Habitants3D {
     this.textes = this.textes.filter((b) => b.fin > 0);
     if (camera) this.eviterChevauchements(camera);
 
-    // qui est à l'intérieur de chaque bâtiment
+    // qui est à l'intérieur des bâtiments publics ; les maisons ne s'affichent que pour l'habitant sélectionné
     const dedans = {};
     for (const v of sim.habitants) if (v.interieur && v.batiment) (dedans[v.batiment] ||= []).push(v);
+    const choisi = selection != null ? sim.habitant(selection) : null;
     for (const b of sim.batiments) {
       const gens = dedans[b.id] || [];
-      const proche = !cam || Math.hypot(cam.x - b.x, cam.z - b.z) < 70;
       const maison = b.type === 'maison';
       let texte = '';
-      if (gens.length && (!maison || proche)) {
+      if (maison) {
+        // sa maison, et la maison où il se trouve s'il est chez quelqu'un
+        if (choisi && (b.id === choisi.foyer || b.id === choisi.batiment)) {
+          const noms = gens.slice(0, 4).map((v) => v.prenom).join(', ') + (gens.length > 4 ? ` +${gens.length - 4}` : '');
+          texte = `${b.nom || 'Maison'}${noms ? ` · ${noms}` : ''}`;
+        }
+      } else if (gens.length) {
         const noms = gens.slice(0, 3).map((v) => v.prenom).join(', ') + (gens.length > 3 ? ` +${gens.length - 3}` : '');
-        texte = `${maison ? (b.nom || 'Maison') : ACTIVITE_BATIMENT[b.type] || b.nom} · ${noms}`;
+        texte = `${ACTIVITE_BATIMENT[b.type] || b.nom} · ${noms}`;
       }
       const e = this.badge(b, texte, solY(b.x, b.z) + (b.type === 'mosquee' ? 10 : maison ? 6 : 7.5));
       // taille à l'écran à peu près constante : ni énorme de près, ni illisible de loin
