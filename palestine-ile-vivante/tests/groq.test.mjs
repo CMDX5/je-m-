@@ -9,6 +9,7 @@ globalThis.localStorage = { getItem: (k) => stock[k] ?? null, setItem: (k, v) =>
 let mode = 'ok';
 const envois = [];
 const limites = new Map(); // modèle → réponse 429 imposée
+const erreurs = new Map(); // modèle → [statut, corps] imposés
 globalThis.fetch = async (url, opt = {}) => {
   const h = opt.headers || {};
   const rep = (statut, corps) => ({ ok: statut < 300, status: statut, json: async () => corps });
@@ -21,6 +22,7 @@ globalThis.fetch = async (url, opt = {}) => {
     envois.push(`${h['x-fournisseur']}|${corps.modele}`);
     if (mode === 'limite') return rep(429, { attente: 7 });
     if (limites.has(corps.modele)) return rep(429, { attente: limites.get(corps.modele) });
+    if (erreurs.has(corps.modele)) return rep(...erreurs.get(corps.modele));
     const ids = [...corps.prompt.matchAll(/=== Habitant id=(\d+) ===/g)].map((m) => Number(m[1]));
     return rep(200, { quota: { jetons: mode === 'serre' ? 100 : 50000, jetonsReset: '7.5s', requetes: 20, requetesReset: '2s' }, jetonsUtilises: 3000, texte: JSON.stringify({ habitants: ids.map((id) => ({ id, pensee: 'Je vais au marché.', humeur: 70, action: 'aller', lieu: 'marche', parole: '' })) }) });
   }
@@ -46,32 +48,36 @@ assert.equal(sim.habitants.filter((v) => v.pensee === 'Je vais au marché.').len
 p.tick();
 assert.equal(p.actifs, 0, 'écart minimal entre deux appels respecté');
 
-// limite par minute sur tous les modèles : courte pause, sans alarmer le joueur
+assert.deepEqual(p.entrees.map((e) => e.principal), [true, false], 'le petit modèle ne sert qu\'en secours');
+
+// limite par minute sur le bon modèle : courte pause, sans alarmer le joueur ni passer au petit modèle
 mode = 'limite';
-await relancer(p); await relancer(p);
-assert.ok(p.pauseJusqua - performance.now() > 6000, 'limite gratuite : les deux modèles soufflent');
+await relancer(p);
+assert.ok(p.pauses.get('groq|llama-3.3-70b-versatile') - performance.now() > 6000, 'limite gratuite : le modèle souffle');
 assert.equal(p.derniereErreur, '', 'pause courte : pas de message');
 const n = envois.length;
 await relancer(p);
-assert.equal(envois.length, n, 'pas de nouvel appel pendant la pause');
+assert.equal(envois.length, n, 'pause courte : on attend le bon modèle plutôt que le modèle de secours');
 
 // quota de jetons presque vide : le jeu attend la remise à zéro annoncée
 mode = 'serre'; p.pauseJusqua = 0;
 await relancer(p);
 assert.ok(p.pauses.get('groq|llama-3.3-70b-versatile') - performance.now() > 6000, 'quota de jetons presque vide : ce modèle attend sa remise à zéro');
-await relancer(p);
-assert.equal(envois.at(-1), 'groq|llama-3.1-8b-instant', 'pendant ce temps, le groupe suivant part vers un autre modèle');
 
 // quota du jour épuisé partout chez Groq, et pas de clé Gemini : message clair
 mode = 'ok'; p.pauseJusqua = 0;
 limites.set('llama-3.3-70b-versatile', 3600); limites.set('llama-3.1-8b-instant', 3600);
-await relancer(p); await relancer(p);
+await relancer(p);
+assert.equal(envois.at(-1), 'groq|llama-3.3-70b-versatile');
+await relancer(p);
+assert.equal(envois.at(-1), 'groq|llama-3.1-8b-instant', 'bon modèle épuisé pour longtemps : le modèle de secours prend le relais');
 assert.match(p.derniereErreur, /reprennent dans \d+ min.*clé Gemini/, 'Groq épuisé : le joueur sait quoi faire');
 
 // clé Gemini ajoutée : les habitants continuent avec Gemini, Flash-Lite d'abord
 assert.equal(await p.enregistrerCle('AIza_mauvaise', 'gemini'), false, 'mauvaise clé Gemini refusée');
 assert.equal(await p.enregistrerCle('AIza_bonne', 'gemini'), true);
 assert.deepEqual(p.entrees.filter((e) => e.f === 'gemini').map((e) => e.m), ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'], 'Gemini : modèles triés par quota gratuit');
+assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'llama-3.1-8b-instant', 'gemini-2.5-pro'], 'les bons modèles d\'abord, les autres en secours');
 for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p.pauser({ f: 'groq', m }, 3600e3);
 const avant = p.stats.ok;
 await relancer(p);
@@ -79,6 +85,21 @@ assert.equal(envois.at(-1), 'gemini|gemini-2.5-flash-lite');
 assert.equal(p.stats.ok, avant + 12, 'Gemini a pris le relais');
 assert.equal(p.parFournisseur.gemini, 12);
 assert.equal(p.fournisseur, 'Groq + Gemini (gratuit)');
+
+// Gemini surchargé (503) : ce modèle souffle, le suivant prend le relais, sans message technique
+erreurs.set('gemini-2.5-flash-lite', [503, { erreur: 'Gemini surchargé', attente: 60, detail: 'high demand' }]);
+await relancer(p);
+assert.equal(p.derniereErreur, '', 'surcharge passagère : rien d\'effrayant pour le joueur');
+assert.ok(p.pauses.get('gemini|gemini-2.5-flash-lite') - performance.now() > 50000);
+await relancer(p);
+assert.equal(envois.at(-1), 'gemini|gemini-2.5-flash', 'le modèle suivant prend le relais');
+// modèle inadapté (message trop long pour lui) : écarté pour la partie
+erreurs.set('gemini-2.5-flash', [422, { erreur: 'ne convient pas', retirer: true, detail: 'context_length_exceeded' }]);
+await relancer(p);
+assert.ok(!p.entrees.some((e) => e.m === 'gemini-2.5-flash'), 'modèle inadapté retiré');
+assert.deepEqual(p.retires, ['gemini:gemini-2.5-flash']);
+assert.equal(p.derniereErreur, '');
+assert.match(p.erreurTechnique, /context_length_exceeded/, 'le détail reste disponible pour les rapports');
 
 // retirer une clé
 p.oublierCle('gemini');

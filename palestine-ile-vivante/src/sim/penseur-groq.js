@@ -14,13 +14,16 @@ export const FOURNISSEURS = {
   groq: {
     nom: 'Groq',
     cle: 'ile-vivante:groq',
-    preferences: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'],
+    preferences: ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'qwen/qwen3-32b', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant'],
+    // modèles assez bons pour penser à la place d'un habitant ; les autres ne servent qu'en secours
+    principaux: /^(llama-3\.3-70b-versatile|openai\/gpt-oss-120b|qwen\/qwen3-32b)$/,
     exclus: /whisper|guard|tts|embed|orpheus|playai|compound|prompt/i,
   },
   gemini: {
     nom: 'Gemini',
     cle: 'ile-vivante:gemini',
     preferences: [],
+    principaux: /^gemini-[\d.]+-flash(-lite)?$/,
     exclus: /embed|image|tts|audio|live|veo|imagen|aqa|vision|robotics|computer|native|learnlm|nano|banana/i,
   },
 };
@@ -78,6 +81,8 @@ export class PenseurGroq {
     this.dernierEnvoi = -Infinity;
     this.entrees = []; // [{ f, m }] dans l'ordre de préférence
     this.pauses = new Map(); // "f|m" → fin de pause (performance.now)
+    this.retires = []; // modèles écartés pendant la partie (pour les rapports)
+    this.erreurTechnique = '';
     this.jetons = new Map(); // "f|m" → jetons estimés par envoi
   }
 
@@ -104,7 +109,7 @@ export class PenseurGroq {
       const dispo = (d.modeles || []).filter((m) => !FOURNISSEURS[f].exclus.test(m));
       const liste = f === 'gemini' ? trierGemini(dispo) : [...FOURNISSEURS.groq.preferences.filter((m) => dispo.includes(m)), ...dispo.filter((m) => !FOURNISSEURS.groq.preferences.includes(m))];
       this.erreurs[f] = liste.length ? '' : `Aucun modèle de discussion disponible sur ce compte ${nom}.`;
-      return liste.map((m) => ({ f, m }));
+      return liste.map((m) => ({ f, m, principal: FOURNISSEURS[f].principaux.test(m) }));
     } catch {
       this.erreurs[f] = 'Pas de connexion internet.';
       return [];
@@ -113,7 +118,9 @@ export class PenseurGroq {
 
   async verifier() {
     const listes = await Promise.all(ORDRE.map((f) => this.verifierUn(f)));
-    this.entrees = listes.flat();
+    // d'abord les bons modèles (Groq puis Gemini), ensuite ceux de secours
+    const toutes = listes.flat();
+    this.entrees = [...toutes.filter((e) => e.principal), ...toutes.filter((e) => !e.principal)];
     this.disponible = this.entrees.length > 0;
     if (this.disponible) {
       const premier = this.entrees[0];
@@ -146,9 +153,20 @@ export class PenseurGroq {
     this.disponible = this.entrees.length > 0;
   }
 
-  // premier modèle, dans l'ordre de préférence, qui n'est pas en train de souffler
+  // premier modèle, dans l'ordre de préférence, qui n'est pas en train de souffler.
+  // Un modèle de secours ne sert que si aucun bon modèle ne reprend dans la minute.
   choisir(maintenant) {
-    return this.entrees.find((e) => maintenant >= (this.pauses.get(`${e.f}|${e.m}`) || 0));
+    const libre = (e) => maintenant >= (this.pauses.get(`${e.f}|${e.m}`) || 0);
+    const bon = this.entrees.find((e) => e.principal && libre(e));
+    if (bon) return bon;
+    const bientot = this.entrees.some((e) => e.principal && (this.pauses.get(`${e.f}|${e.m}`) || 0) - maintenant < 60000);
+    return bientot ? undefined : this.entrees.find(libre);
+  }
+
+  retirer(e) {
+    this.retires.push(`${e.f}:${e.m}`);
+    this.entrees = this.entrees.filter((x) => x !== e);
+    this.disponible = this.entrees.length > 0;
   }
 
   tick() {
@@ -195,7 +213,10 @@ export class PenseurGroq {
       const d = await r.json().catch(() => ({}));
       if (r.status === 429) throw Object.assign(new Error('limite'), { attente: d.attente || 20, quota: d.quota });
       if (r.status === 401) { this.oublierCle(e.f, false); throw new Error(`${FOURNISSEURS[e.f].nom} refuse la clé enregistrée. Saisissez-en une nouvelle.`); }
-      if (r.status === 404) { this.entrees = this.entrees.filter((x) => x !== e); this.disponible = this.entrees.length > 0; throw new Error(''); }
+      // modèle inadapté (message trop long, introuvable) : on ne s'en sert plus ; surchargé : il souffle un moment
+      if (!r.ok) this.erreurTechnique = `${e.f}:${e.m} ${r.status} ${String(d.detail || d.erreur || '').slice(0, 160)}`;
+      if (d.retirer) { this.retirer(e); throw Object.assign(new Error('modèle retiré'), { silencieux: true }); }
+      if (r.status === 503) throw Object.assign(new Error('surcharge'), { attente: d.attente || 60, surcharge: true });
       if (!r.ok) throw new Error(d.erreur || `erreur ${r.status}`);
       if (sim !== this.sim) return;
       if (d.jetonsUtilises) this.jetons.set(k, (this.jetons.get(k) || d.jetonsUtilises) * 0.5 + d.jetonsUtilises * 0.5);
@@ -210,16 +231,21 @@ export class PenseurGroq {
     } catch (err) {
       for (const id of ids) sim.echec(id);
       this.stats.echecs += ids.length;
-      if (err.attente) {
+      if (err.silencieux) {
+        this.derniereErreur = this.disponible ? '' : 'Aucun modèle ne convient sur ces comptes.';
+      } else if (err.attente) {
         // longue attente = quota du jour épuisé pour ce modèle : les groupes suivants iront vers un autre modèle
         this.pauser(e, Math.min(err.attente, 6 * 3600) * 1000);
         const reprise = this.pauseJusqua - performance.now();
-        this.derniereErreur = !this.choisir(performance.now()) && reprise > 15000
-          ? `Limites gratuites atteintes : les habitants reprennent dans ${reprise > 120000 ? `${Math.ceil(reprise / 60000)} min` : `${Math.ceil(reprise / 1000)} s`}.${this.aCle('gemini') ? '' : ' Ajoutez une clé Gemini (onglet Village) pour continuer.'}`
+        const aucunLibre = !this.entrees.some((x) => performance.now() >= (this.pauses.get(`${x.f}|${x.m}`) || 0));
+        this.derniereErreur = aucunLibre && reprise > 15000
+          ? err.surcharge && reprise <= 120000 ? 'Les modèles gratuits sont très demandés en ce moment : les habitants reprennent dans un instant.' : `Limites gratuites atteintes : les habitants reprennent dans ${reprise > 120000 ? `${Math.ceil(reprise / 60000)} min` : `${Math.ceil(reprise / 1000)} s`}.${this.aCle('gemini') ? '' : ' Ajoutez une clé Gemini (onglet Village) pour continuer.'}`
           : '';
       } else {
         this.pauser(e, 5000);
-        this.derniereErreur = err instanceof SyntaxError ? 'Réponse illisible, nouvel essai dans un instant.' : err.message;
+        // détail technique gardé pour les rapports, jamais montré tel quel au joueur
+        this.derniereErreur = '';
+        this.erreurTechnique = String(err.message || err).slice(0, 200);
       }
     } finally {
       this.actifs = 0;

@@ -10,7 +10,7 @@ export function resumer(sim, penseur, erreursPage) {
   return {
     version: 1,
     moment: sim.horodatage(),
-    penseur: penseur ? { mode: penseur.mode, modele: penseur.modele, fournisseur: penseur.fournisseurActuel || '', parFournisseur: penseur.parFournisseur || null, cles: penseur.cles ? Object.keys(penseur.cles).filter((f) => penseur.cles[f]) : [], ...penseur.stats, msMoyen: Math.round(penseur.stats.ms || 0), erreur: penseur.derniereErreur || '' } : null,
+    penseur: penseur ? { mode: penseur.mode, modele: penseur.modele, fournisseur: penseur.fournisseurActuel || '', parFournisseur: penseur.parFournisseur || null, cles: penseur.cles ? Object.keys(penseur.cles).filter((f) => penseur.cles[f]) : [], ...penseur.stats, msMoyen: Math.round(penseur.stats.ms || 0), erreur: penseur.derniereErreur || '', technique: penseur.erreurTechnique || '', retires: penseur.retires || [], modeles: penseur.entrees ? penseur.entrees.map((e) => `${e.f}:${e.m}${e.principal ? '' : ' (secours)'}`) : [] } : null,
     stats: sim.stats,
     corps: {
       faim: moyenne(H, (v) => v.besoins.faim), soif: moyenne(H, (v) => v.besoins.soif), energie: moyenne(H, (v) => v.besoins.energie),

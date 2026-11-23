@@ -50,8 +50,14 @@ export default async function handler(req, res) {
       return res.status(429).json({ erreur: `limite ${f.nom} atteinte`, attente: attenteDepuis(r, texte), quota });
     }
     if (r.status === 401 || r.status === 403) return res.status(401).json({ erreur: `clé refusée par ${f.nom}` });
-    if (r.status === 404) return res.status(404).json({ erreur: `modèle ${modele} introuvable chez ${f.nom}` });
-    if (!r.ok) return res.status(502).json({ erreur: `${f.nom} a répondu ${r.status} : ${(await r.text()).slice(0, 200)}` });
+    if (r.status === 404) return res.status(404).json({ erreur: `modèle ${modele} introuvable chez ${f.nom}`, retirer: true });
+    if (!r.ok) {
+      const texte = (await r.text().catch(() => '')).slice(0, 300);
+      // modèle surchargé ou en panne chez le fournisseur : passager, on réessaiera plus tard
+      if (r.status >= 500) return res.status(503).json({ erreur: `${f.nom} surchargé`, attente: 60, detail: texte });
+      // message trop long pour ce modèle, ou modèle qui refuse ce format : on ne s'en sert plus
+      return res.status(422).json({ erreur: `${modele} ne convient pas`, retirer: true, detail: texte });
+    }
     const j = await r.json();
     return res.status(200).json({ texte: j.choices?.[0]?.message?.content ?? '', quota, jetonsUtilises: j.usage?.total_tokens ?? null });
   } catch {
