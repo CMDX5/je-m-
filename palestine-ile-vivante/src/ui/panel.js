@@ -6,6 +6,8 @@ import { METIERS, METIERS_ADULTES, PROJETS, NOMS_OBJETS } from '../sim/data.js';
 import { nomComplet, libelleMetier } from '../sim/villager.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Une clé Google commence par « AIza » ; sinon, c'est une clé Groq.
+const fournisseurDeCle = (cle) => (/^AIza/.test(cle) ? 'gemini' : 'groq');
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const $ = (s) => document.querySelector(s);
 const arrondi = (x) => Math.round(x * 10) / 10;
@@ -122,14 +124,14 @@ export class Interface {
         html = `<span>${enPause ? 'Le temps attend : ' : ''}${n} habitant${n > 1 ? 's' : ''} doi${n > 1 ? 'vent' : 't'} décider.</span><button class="btn principal" data-reflechir type="button">Laisser réfléchir</button>${p.derniereErreur ? `<small>${esc(p.derniereErreur)}</small>` : ''}`;
       } else if (p.derniereErreur) html = esc(p.derniereErreur);
     } else if (p?.mode === 'groq') {
-      if (!p.pret) html = 'Connexion à Groq…';
+      if (!p.pret) html = 'Connexion aux modèles…';
       else if (!p.disponible && !p.cle) {
         cls = 'alerte';
-        html = `<form data-cle-groq><b>Pour que les habitants pensent seuls, il faut une clé Groq gratuite.</b>
-          <small>1. Ouvrez <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> et connectez-vous (un compte Google suffit).<br>2. Touchez « Create API Key », puis copiez la clé.<br>3. Collez-la ici. Elle reste sur votre téléphone.</small>
-          <input id="cle-groq" type="password" autocomplete="off" placeholder="gsk_…" aria-label="Clé Groq"><button class="btn principal" type="submit">Enregistrer</button>
+        html = `<form data-cle-groq><b>Pour que les habitants pensent seuls, il faut une clé gratuite : Groq ou Google Gemini (les deux, c'est encore mieux).</b>
+          <small><b>Groq</b> : ouvrez <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>, touchez « Create API Key », copiez la clé (gsk_…).<br><b>Gemini</b> : ouvrez <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, touchez « Create API key », copiez la clé (AIza…).<br>Collez-la ici. Elle reste sur votre téléphone.</small>
+          <input id="cle-groq" type="password" autocomplete="off" placeholder="gsk_… ou AIza…" aria-label="Clé Groq ou Gemini"><button class="btn principal" type="submit">Enregistrer</button>
           ${p.derniereErreur ? `<small class="neg">${esc(p.derniereErreur)}</small>` : ''}</form>`;
-      } else if (!p.disponible) { cls = 'alerte'; html = `${esc(p.derniereErreur || 'Groq indisponible.')} <button class="btn" data-oublier-cle type="button">Changer de clé</button>`; }
+      } else if (!p.disponible) { cls = 'alerte'; html = `${esc(p.derniereErreur || 'Modèles indisponibles.')} <button class="btn" data-oublier-cle type="button">Changer de clé</button>`; }
       else if (p.derniereErreur) html = esc(p.derniereErreur);
       else if (enPause) html = `⏳ Les habitants réfléchissent (${s.nbAttente()} en attente)…`;
     } else if (p && !p.disponible) {
@@ -144,16 +146,17 @@ export class Interface {
       b.dataset.ecoute = '1';
       b.addEventListener('click', (e) => {
         if (e.target.closest('[data-reflechir]')) this.penseur?.reflechir?.();
-        if (e.target.closest('[data-oublier-cle]')) { this.penseur?.oublierCle?.(); b.dataset.cache = ''; }
+        if (e.target.closest('[data-oublier-cle]')) { for (const f of ['groq', 'gemini']) this.penseur?.oublierCle?.(f); b.dataset.cache = ''; }
       });
       b.addEventListener('submit', async (e) => {
         e.preventDefault();
         const v = b.querySelector('#cle-groq')?.value.trim();
         if (!v) return;
         b.dataset.cache = '';
-        const ok = await this.penseur?.enregistrerCle?.(v);
+        const f = fournisseurDeCle(v);
+        const ok = await this.penseur?.enregistrerCle?.(v, f);
         b.dataset.cache = '';
-        this.toast(ok ? `Clé acceptée. Les habitants pensent avec ${this.penseur.modele}.` : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
+        this.toast(ok ? `Clé ${f === 'gemini' ? 'Gemini' : 'Groq'} acceptée. Les habitants pensent seuls.` : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
       });
     }
   }
@@ -242,7 +245,15 @@ export class Interface {
         <button class="btn" data-commerce="acheterRemedes" ${s.res.pieces < 30 ? 'disabled' : ''}>8 remèdes ← 30 pièces</button></div>`;
     } else out += `<p class="note">Aucun navire à quai.</p>`;
     if (p?.mode === 'groq') {
-      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Groq, modèle ${esc(p.modele)} : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse, ${(p.stats.ms / 1000).toFixed(1)} s par groupe.` : 'Aucune clé Groq valide.'}</p>`;
+      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Dernier modèle : ${esc(p.fournisseurActuel === 'gemini' ? 'Gemini' : 'Groq')} ${esc(p.modele)} · ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse, ${(p.stats.ms / 1000).toFixed(1)} s par groupe.` : 'Aucune clé valide.'}</p>`;
+      for (const [f, nom, lien, ph] of [['groq', 'Groq', 'https://console.groq.com/keys', 'gsk_…'], ['gemini', 'Google Gemini', 'https://aistudio.google.com/apikey', 'AIza…']]) {
+        if (p.aCle?.(f)) {
+          out += `<p class="note">${nom} : ${p.actif(f) ? `<span class="pos">actif</span> · ${p.parFournisseur?.[f] || 0} décisions` : `<span class="neg">${esc(p.erreurs?.[f] || 'indisponible')}</span>`} <button class="btn" data-action="oublier-cle" data-fournisseur="${f}" type="button">Retirer la clé</button></p>`;
+        } else {
+          out += `<form data-form="cle" data-fournisseur="${f}" class="boutons"><small>Ajouter une clé ${nom} gratuite (<a href="${lien}" target="_blank" rel="noopener">obtenir une clé</a>). Quand un modèle atteint sa limite, les habitants continuent avec l'autre.</small>
+            <input name="cle" type="password" autocomplete="off" placeholder="${ph}" aria-label="Clé ${nom}"><button class="btn" type="submit">Enregistrer</button></form>`;
+        }
+      }
     } else if (p?.mode === 'claude') {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Claude, sur votre compte : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse. Chaque toucher sur « Laisser réfléchir » fait penser jusqu'à 16 habitants, chacun d'après sa propre perception.` : esc(p.derniereErreur)}</p>`;
     } else if (p) {
@@ -355,6 +366,7 @@ export class Interface {
     else if (t.dataset.action === 'sauver') this.actions.sauvegarder();
     else if (t.dataset.action === 'charger') this.actions.charger();
     else if (t.dataset.action === 'recommencer') this.actions.recommencer();
+    else if (t.dataset.action === 'oublier-cle') this.penseur?.oublierCle?.(t.dataset.fournisseur);
     this.rendreContenu(true);
     this.rendreFiche(true);
   }
@@ -373,6 +385,16 @@ export class Interface {
     } else if (f.dataset.form === 'annonce') {
       const t = String(d.get('texte') || '').trim();
       if (t) { s.annoncer(t); this.toast('Annonce faite. Chacun l\'entendra à sa prochaine décision.', 'conseil'); }
+    } else if (f.dataset.form === 'cle') {
+      const v = String(d.get('cle') || '').trim();
+      const four = f.dataset.fournisseur;
+      if (v) {
+        this.toast('Vérification de la clé…', 'conseil');
+        this.penseur?.enregistrerCle?.(v, four).then((ok) => {
+          this.toast(ok ? 'Clé acceptée.' : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
+          this.rendreContenu(true);
+        });
+      }
     } else if (f.dataset.form === 'reponse') {
       const t = String(d.get('texte') || '').trim();
       if (t) s.repondreRequete(Number(f.dataset.rid), t);
