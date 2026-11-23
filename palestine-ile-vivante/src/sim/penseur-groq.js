@@ -5,7 +5,7 @@
 // Les clés du joueur restent dans son navigateur ; elles passent par nos fonctions Vercel
 // (api/pensee.js, api/modeles.js) uniquement pour atteindre le fournisseur, sans être stockées.
 
-import { promptLot, appliquerLot } from './penseur-claude.js';
+import { promptLot, appliquerLot, promptLotBilan, appliquerLotBilan, TAILLE_BILAN } from './penseur-claude.js';
 
 const TAILLE_GROUPE = 8; // moins d'habitants par demande : chacun garde mieux sa propre voix
 const ECART_MIN_MS = 2500; // laisse respirer les limites gratuites
@@ -176,7 +176,10 @@ export class PenseurGroq {
     const e = this.choisir(maintenant);
     if (!e) return;
     const ids = this.sim.demandes().slice(0, TAILLE_GROUPE);
-    if (ids.length) this.lancer(ids, e);
+    // les décisions d'abord ; quand peu d'habitants attendent, ceux qui dorment font leur bilan du soir
+    const bilans = ids.length < 4 ? this.sim.demandesBilan().slice(0, TAILLE_BILAN) : [];
+    if (bilans.length) this.lancer(bilans, e, 'bilan');
+    else if (ids.length) this.lancer(ids, e);
   }
 
   reflechir() { /* autonome : pas de bouton */ }
@@ -194,10 +197,11 @@ export class PenseurGroq {
     if (Number.isFinite(q.requetes) && q.requetes < 1) this.pauser(e, Math.min(65000, duree(q.requetesReset) + 300));
   }
 
-  async lancer(ids, e = this.entrees[0]) {
+  async lancer(ids, e = this.entrees[0], type = 'decision') {
     const sim = this.sim;
-    const prompt = promptLot(sim, ids);
-    for (const id of ids) sim.marquerEnvoye(id);
+    const bilan = type === 'bilan';
+    const prompt = bilan ? promptLotBilan(sim, ids) : promptLot(sim, ids);
+    for (const id of ids) sim.marquerEnvoye(id, type);
     this.actifs = 1;
     this.groupe = ids;
     this.dernierEnvoi = performance.now();
@@ -222,6 +226,11 @@ export class PenseurGroq {
       if (sim !== this.sim) return;
       if (d.jetonsUtilises) this.jetons.set(k, (this.jetons.get(k) || d.jetonsUtilises) * 0.5 + d.jetonsUtilises * 0.5);
       this.reglerRythme(e, d.quota);
+      if (bilan) {
+        this.stats.bilans = (this.stats.bilans || 0) + appliquerLotBilan(sim, ids, extraireJson(d.texte));
+        this.derniereErreur = '';
+        return;
+      }
       const n = appliquerLot(sim, ids, extraireJson(d.texte));
       this.stats.ok += n;
       this.stats.echecs += ids.length - n;
@@ -231,8 +240,8 @@ export class PenseurGroq {
       this.stats.ms = this.stats.ms ? this.stats.ms * 0.7 + ms * 0.3 : ms;
     } catch (err) {
       // le modèle n'a rien dit : ces habitants n'ont pas pensé, ils attendent le prochain modèle
-      for (const id of ids) sim.remettre(id);
-      this.stats.renvois += ids.length;
+      for (const id of ids) bilan ? sim.bilanManque(id) : sim.remettre(id);
+      if (!bilan) this.stats.renvois += ids.length;
       if (err.silencieux) {
         this.derniereErreur = this.disponible ? '' : 'Aucun modèle ne convient sur ces comptes.';
       } else if (err.attente) {

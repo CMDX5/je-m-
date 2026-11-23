@@ -68,6 +68,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     L.push(`Tu es ${nomComplet(v)}, ${v.age} ans. Il est ${hh}h${mm}, tu vas dormir.`);
     if (v.identite) L.push(`Ce que tu écrivais de toi : ${v.identite}`);
     if (v.resume) L.push(`Ton dernier résumé : ${v.resume}`);
+    if (v.lecons) L.push(`Ce que tu pensais avoir compris de la vie ici : ${v.lecons}`);
     L.push('Ce que tu as retenu récemment :');
     for (const s of v.souvenirs.slice(-14)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
     const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => `${sim.habitant(Number(id)).prenom} : ${a.texte}`);
@@ -102,9 +103,10 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   }
 
   const souv = v.souvenirs.slice(-12);
-  if (v.resume || souv.length) {
+  if (v.resume || v.lecons || souv.length) {
     L.push('');
     if (v.resume) L.push(`Ce que tu retiens de ta vie : ${v.resume}`);
+    if (v.lecons) L.push(`Ce que tu as compris de la vie ici : ${v.lecons}`);
     if (souv.length) {
       L.push('Tes souvenirs récents :');
       for (const s of souv) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);

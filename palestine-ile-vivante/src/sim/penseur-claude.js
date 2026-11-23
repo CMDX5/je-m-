@@ -4,7 +4,7 @@
 // « Laisser réfléchir » fait penser un groupe d'habitants en un seul appel.
 // Chacun reçoit SA perception et Claude décide pour lui seul, à sa place.
 
-import { SYSTEME } from './prompts.js';
+import { SYSTEME, SYSTEME_BILAN } from './prompts.js';
 import { construirePrompt, infosVillage } from './perception.js';
 
 const TAILLE_GROUPE = 16;
@@ -37,6 +37,22 @@ const DEFINITIFS = new Set(['not_granted', 'sampling_disabled', 'not_declared', 
 export function promptLot(sim, ids) {
   const blocs = ids.map((id) => `=== Habitant id=${id} ===\n${construirePrompt(sim, sim.habitant(id), 'decision', { commun: false })}`);
   return `${CONSIGNE}${SYSTEME}${FORMAT}\n\n${infosVillage(sim)}\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par l'objet JSON ({"habitants": [...]}, ${ids.length} habitants).`;
+}
+
+// Bilan du soir pour plusieurs habitants : chacun relit SES souvenirs et écrit, seul, ce qu'il en garde.
+export const TAILLE_BILAN = 4;
+export function promptLotBilan(sim, ids) {
+  const blocs = ids.map((id) => `=== Habitant id=${id} ===\n${construirePrompt(sim, sim.habitant(id), 'bilan')}`);
+  return `${CONSIGNE}${SYSTEME_BILAN}\n\nFORMAT DE TA RÉPONSE : uniquement un objet JSON {"habitants": [...]}, un objet par habitant, dans l'ordre donné, avec les clés "id", "resume", "identite", "lecons".\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par l'objet JSON (${ids.length} habitants).`;
+}
+export function appliquerLotBilan(sim, ids, rep) {
+  const liste = Array.isArray(rep) ? rep : Array.isArray(rep?.habitants) ? rep.habitants : [];
+  let n = 0;
+  ids.forEach((id, i) => {
+    const d = liste.find((x) => Number(x?.id) === id) || liste[i];
+    if (d && typeof d === 'object') { sim.appliquerBilan(id, d); n++; } else sim.bilanManque(id);
+  });
+  return n;
 }
 
 // Rend à chaque habitant SA décision ; ceux sans réponse restent un moment sans rien faire.
@@ -88,12 +104,12 @@ export class PenseurClaude {
     return this.sim.demandes().length;
   }
 
-  // Appelé par le bouton « Laisser réfléchir ».
+  // Appelé par le bouton « Laisser réfléchir ». S'il n'y a rien à décider, ceux qui dorment font leur bilan.
   async reflechir() {
     if (!this.disponible || this.actifs) return;
     const sim = this.sim;
     const ids = sim.demandes().slice(0, TAILLE_GROUPE);
-    if (!ids.length) return;
+    if (!ids.length) return this.bilans();
     const prompt = promptLot(sim, ids);
     for (const id of ids) sim.marquerEnvoye(id);
     this.groupe = ids;
@@ -118,6 +134,23 @@ export class PenseurClaude {
     } finally {
       this.actifs = 0;
       this.groupe = [];
+    }
+  }
+
+  async bilans() {
+    const sim = this.sim;
+    const ids = sim.demandesBilan().slice(0, TAILLE_BILAN);
+    if (!ids.length) return;
+    const prompt = promptLotBilan(sim, ids);
+    for (const id of ids) sim.marquerEnvoye(id, 'bilan');
+    this.actifs = 1;
+    try {
+      const rep = await this.sample.json(prompt, { modelTier: 'quick', cache: false });
+      if (sim === this.sim) appliquerLotBilan(sim, ids, rep);
+    } catch {
+      for (const id of ids) sim.bilanManque(id);
+    } finally {
+      this.actifs = 0;
     }
   }
 }

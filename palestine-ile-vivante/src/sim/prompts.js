@@ -55,7 +55,7 @@ Réponds uniquement par un objet JSON :
 
 export const SYSTEME_BILAN = `Tu es un habitant d'un village sur une île de la Méditerranée. Tu t'apprêtes à dormir. Tu ne sais que ce qui est écrit dans le message. N'invente rien. Tu parles français, à la première personne.
 
-Réponds uniquement par un objet JSON : "resume" (ce que tu gardes en mémoire de ta vie récente, 5 phrases au plus) et "identite" (qui tu es, selon toi, en une ou deux phrases).`;
+Réponds uniquement par un objet JSON : "resume" (ce que tu gardes en mémoire de ta vie récente, 5 phrases au plus), "identite" (qui tu es, selon toi, en une ou deux phrases) et "lecons" (ce que tu as compris jusqu'ici de la vie sur cette île, d'après ce que tu as vécu, 5 phrases au plus ; tu peux garder, corriger ou oublier ce que tu pensais avant).`;
 
 export const SCHEMA_DECISION = {
   type: 'object',
@@ -85,7 +85,7 @@ export const SCHEMA_BILAN = {
   type: 'object',
   additionalProperties: false,
   required: ['resume', 'identite'],
-  properties: { resume: { type: 'string' }, identite: { type: 'string' } },
+  properties: { resume: { type: 'string' }, identite: { type: 'string' }, lecons: { type: 'string' } },
 };
 
 export const TYPES = {

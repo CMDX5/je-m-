@@ -325,6 +325,12 @@ export class Simulation {
     out.sort((a, b) => (b.priorite ? 1 : 0) - (a.priorite ? 1 : 0) || a.depuis - b.depuis);
     return out.map((v) => v.id);
   }
+  // Le modèle n'a pas pu faire le bilan : il sera redemandé plus tard.
+  bilanManque(id) {
+    const v = this.habitant(id);
+    if (v) v.bilanDu = true;
+  }
+
   demandesBilan() {
     return this.habitants.filter((v) => v.bilanDu && v.statut !== 'reflechit').map((v) => v.id);
   }
@@ -390,7 +396,7 @@ export class Simulation {
       this.attendre(v);
       v.priorite = true;
     }
-    if (d.action === 'dormir' && v.souvenirs.length >= 10 && this.temps - v.derniereBilan > 14 * 60) v.bilanDu = true;
+    if (d.action === 'dormir' && v.souvenirs.length >= 4 && this.temps - v.derniereBilan > 14 * 60) v.bilanDu = true;
   }
 
   appliquerBilan(id, d) {
@@ -398,6 +404,7 @@ export class Simulation {
     if (!v || !d) return;
     if (d.resume) v.resume = clip(d.resume, 700);
     if (d.identite) v.identite = clip(d.identite, 260);
+    if (typeof d.lecons === 'string') v.lecons = clip(d.lecons, 700);
     v.souvenirs = v.souvenirs.slice(-6);
     v.derniereBilan = this.temps;
     v.bilanDu = false;

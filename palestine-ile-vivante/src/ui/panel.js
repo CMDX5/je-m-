@@ -509,6 +509,7 @@ export class Interface {
 
       <h3>Mémoire (écrite par ${F ? 'elle' : 'lui'})</h3>
       ${v.resume ? `<div class="note"><b>Bilan :</b> ${esc(v.resume)}</div>` : ''}
+      ${v.lecons ? `<div class="note"><b>Ce qu'il a compris :</b> ${esc(v.lecons)}</div>` : ''}
       ${souvenirs.length ? souvenirs.map((m) => `<div class="souvenir"><i style="background:var(--accent)"></i><span>${esc(m.texte)}<small>${esc(s.horodatage(m.t))}</small></span></div>`).join('') : '<p class="note">Aucun souvenir noté pour l’instant.</p>'}
 
       <h3>Ce qu'${F ? 'elle' : 'il'} pense des autres</h3>

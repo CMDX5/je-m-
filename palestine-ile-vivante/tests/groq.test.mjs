@@ -108,3 +108,28 @@ p.oublierCle('gemini');
 assert.equal(stock['ile-vivante:gemini'], undefined);
 assert.ok(p.entrees.every((e) => e.f === 'groq'));
 console.log('En ligne : clés Groq et Gemini vérifiées, modèles choisis, limites respectées, relais entre fournisseurs. OK');
+
+// Bilan du soir : quand peu d'habitants attendent, ceux qui dorment écrivent eux-mêmes ce qu'ils retiennent et ont compris
+{
+  const sim2 = new Simulation({ seed: 9 }).init();
+  const p2 = new PenseurGroq(sim2);
+  await p2.enregistrerCle('gsk_bonne', 'groq');
+  limites.clear(); erreurs.clear();
+  for (const v of sim2.habitants) v.statut = 'agit';
+  for (const v of sim2.habitants.slice(0, 3)) v.bilanDu = true;
+  const avantFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opt = {}) => {
+    if (url !== 'api/pensee') return avantFetch(url, opt);
+    const corps = JSON.parse(opt.body);
+    assert.match(corps.prompt, /"lecons"/, 'le bilan propose d\'écrire ce qu\'on a compris, sans exemple imposé');
+    const ids = [...corps.prompt.matchAll(/=== Habitant id=(\d+) ===/g)].map((m) => Number(m[1]));
+    return { ok: true, status: 200, json: async () => ({ texte: JSON.stringify({ habitants: ids.map((id) => ({ id, resume: 'Une journée.', identite: 'Moi.', lecons: `Leçon de ${id}.` })) }) }) };
+  };
+  p2.tick();
+  await attendre();
+  const ecrits = sim2.habitants.slice(0, 3);
+  assert.ok(ecrits.every((v) => v.lecons === `Leçon de ${v.id}.` && v.resume && !v.bilanDu), 'chacun garde SA leçon');
+  assert.match(sim2.construirePrompt(ecrits[0].id), /Ce que tu as compris de la vie ici : Leçon de/, 'il relit sa leçon au moment de décider');
+  globalThis.fetch = avantFetch;
+  console.log('Bilan du soir : chaque habitant écrit et relit ce qu\'il a compris. OK');
+}
