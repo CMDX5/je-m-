@@ -319,13 +319,18 @@ export class Interface {
   }
 
   // ---------- Paroles ----------
+  // Paroles : tout ce qui sort des habitants — ce qui se dit au village, et leur vie intérieure
+  // (souvenirs, avis sur les autres, qui ils sont, ce qu'ils comprennent), écrits par eux.
   vueParoles() {
     const s = this.sim;
-    let out = `<h3>Ce qui se dit au village</h3>
-      <label class="note"><input type="checkbox" id="voir-pensees" ${this.montrerPensees ? 'checked' : ''}> Montrer aussi les pensées intérieures</label>`;
-    const f = s.flux.filter((x) => this.montrerPensees || x.type !== 'pensee').slice(-90).reverse();
-    if (!f.length) out += `<p class="note">Personne n'a encore parlé.</p>`;
-    for (const x of f) {
+    const f = this.filtreParoles || 'flux';
+    const filtres = [['flux', 'Ce qui se dit'], ['tout', 'Vie intérieure'], ['mots', 'Pensées intimes'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
+    let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
+    if (f === 'flux') {
+    out += `<label class="note"><input type="checkbox" id="voir-pensees-flux" ${this.montrerPensees ? 'checked' : ''}> Montrer aussi les pensées intérieures</label>`;
+    const dits = s.flux.filter((x) => this.montrerPensees || x.type !== 'pensee').slice(-90).reverse();
+    if (!dits.length) out += `<p class="note">Personne n'a encore parlé.</p>`;
+    for (const x of dits) {
       const v = x.id >= 0 ? s.habitant(x.id) : null;
       const a = x.a != null ? s.habitant(x.a) : null;
       const qui = x.type === 'conseil' ? 'Le conseil' : v ? `<span class="lien" data-hab="${v.id}">${esc(v.prenom)}</span>` : '';
@@ -333,20 +338,10 @@ export class Interface {
       const ton = x.ton && x.ton !== 'calme' ? ` <small class="note">(${esc(TONS[x.ton] || x.ton)})</small>` : '';
       out += `<div class="journal-e ${x.type === 'pensee' ? 'pensee-e' : /^col[eè]re/.test(x.ton || '') ? 'mal' : x.type === 'conseil' ? 'conseil' : ''}"><time>${esc(s.horodatage(x.t))}${x.lieu ? ` · ${esc(x.lieu)}` : ''}</time>${qui}${x.type === 'pensee' ? ' pense' : vers + ' :'} « ${esc(x.texte)} »${ton}</div>`;
     }
-    return out;
-  }
 
-  // Journal : d'abord la vie intérieure (tout ce que les habitants écrivent eux-mêmes), puis la chronique des événements.
-  vueJournal() {
-    const s = this.sim;
-    const f = this.filtreJournal || 'tout';
-    const filtres = [['tout', 'Vie intérieure'], ['mots', 'Pensées et paroles'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['evenements', 'Événements']];
-    let out = `<h3>Journal</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-journal="${k}" type="button">${n}</button>`).join('')}</div>`;
-    if (f === 'evenements') {
-      for (const e of [...s.journal].reverse().slice(0, 150)) out += `<div class="journal-e ${e.type}" ${e.sujets?.length ? `data-sujet="${e.sujets[0]}"` : ''}><time>${esc(s.horodatage(e.t))}</time>${esc(e.texte)}</div>`;
       return out;
     }
-    out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans l'onglet Paroles.</p>`;
+    out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans « Ce qui se dit ».</p>`;
     const garder = { tout: () => true, mots: (e) => e.type === 'pensee' || e.type === 'parole', souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons' }[f] || (() => true);
     const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
     if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
@@ -368,15 +363,26 @@ export class Interface {
       }[e.type] || `${qui} : « ${esc(e.texte)} »`;
       out += `<div class="journal-e interieur-${e.type}" data-sujet="${e.id}"><time>${esc(s.horodatage(e.t))}</time>${phrase}</div>`;
     }
+
+    return out;
+  }
+
+  // Journal : la chronique du village, les événements.
+  vueJournal() {
+    const s = this.sim;
+    let out = `<h3>Chronique du village</h3>`;
+    for (const e of [...s.journal].reverse().slice(0, 150)) {
+      out += `<div class="journal-e ${e.type}" ${e.sujets?.length ? `data-sujet="${e.sujets[0]}"` : ''}><time>${esc(s.horodatage(e.t))}</time>${esc(e.texte)}</div>`;
+    }
     return out;
   }
 
   // ---------- Événements ----------
   clicContenu(e) {
-    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer],[data-journal]');
+    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer],[data-paroles]');
     if (!t) return;
     const s = this.sim;
-    if (t.dataset.journal) { this.filtreJournal = t.dataset.journal; return this.rendreContenu(true); }
+    if (t.dataset.paroles) { this.filtreParoles = t.dataset.paroles; return this.rendreContenu(true); }
     if (t.dataset.hab !== undefined) return this.actions.selectionner(Number(t.dataset.hab), true);
     if (t.dataset.sujet !== undefined) return this.actions.selectionner(Number(t.dataset.sujet), true);
     if (t.dataset.ignorer) s.ignorerRequete(Number(t.dataset.ignorer));
@@ -434,7 +440,7 @@ export class Interface {
     if (id === 'recherche') { this.filtre.texte = e.target.value; this.rafraichirListe(); }
     else if (id === 'filtre-metier') { this.filtre.metier = e.target.value; this.rafraichirListe(); }
     else if (id === 'tri') { this.filtre.tri = e.target.value; this.rafraichirListe(); }
-    else if (id === 'voir-pensees') { this.montrerPensees = e.target.checked; this.rendreContenu(true); }
+    else if (id === 'voir-pensees-flux') { this.montrerPensees = e.target.checked; this.rendreContenu(true); }
   }
 
   rafraichirListe() {
