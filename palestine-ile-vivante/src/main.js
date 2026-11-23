@@ -83,6 +83,15 @@ creerTerrain(scene, sim.batiments);
 creerVegetation(scene, sim.nav);
 const village = new Village(scene, sim);
 const habitants3d = new Habitants3D(scene, sim);
+// Afficher les pensées au-dessus des têtes (regard du « dieu » qui observe) ; les paroles, elles, s'affichent toujours.
+{
+  const b = document.querySelector('#voir-pensees');
+  let voir = true;
+  try { voir = localStorage.getItem('ile-vivante:pensees') !== 'non'; } catch { /* stockage indisponible */ }
+  const appliquer = () => { habitants3d.voirPensees = voir; b?.classList.toggle('actif', voir); if (b) b.title = voir ? 'Pensées visibles au-dessus des têtes (toucher pour masquer)' : 'Pensées masquées (toucher pour les voir)'; };
+  appliquer();
+  b?.addEventListener('click', () => { voir = !voir; try { localStorage.setItem('ile-vivante:pensees', voir ? 'oui' : 'non'); } catch { /* */ } appliquer(); });
+}
 
 sim.on('construction', ({ cle, batiment }) => {
   if (batiment) village.ajouterBatiment(batiment);
@@ -245,7 +254,8 @@ function boucle() {
   const meteo = sim.meteo.tempete > sim.temps ? 'tempete' : null;
   env.update(sim.heure(), tAnim, meteo);
   village.update(tAnim, env.nuit, sim);
-  habitants3d.update(dt, tAnim);
+  habitants3d.update(dt, tAnim, camera, selection);
+  habitants3d.majTextes(camera, selection);
   habitants3d.majAnneaux(selection, survol);
 
   // caméra : transition douce ou suivi

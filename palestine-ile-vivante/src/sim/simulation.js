@@ -403,6 +403,7 @@ export class Simulation {
     if (Number.isFinite(Number(d.humeur))) v.humeur = clamp(Math.round(Number(d.humeur)), 0, 100);
     if (v.pensee) {
       this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
+      this.emit('pensee', { id: v.id, texte: v.pensee });
       if (penseePersonnelle(v.pensee, this.habitants, v)) this.vivre(v, 'pensee', v.pensee);
     }
     const souvenir = clip(d.souvenir, 300);
@@ -761,6 +762,7 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: null, ton, lieu: v.activite?.nomLieu });
+    this.emit('parole', { id: v.id, a: null, texte, ton });
     if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { ton });
     for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${commentDit(ton)} : « ${texte} »`);
   }
@@ -783,6 +785,7 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: cible.id, ton, lieu: v.activite?.nomLieu });
+    this.emit('parole', { id: v.id, a: cible.id, texte, ton });
     if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { sur: cible.id, ton });
     // la cible entend et doit pouvoir répondre
     const dormait = cible.activite?.action === 'dormir' && cible.statut === 'agit';

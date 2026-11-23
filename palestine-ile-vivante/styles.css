@@ -248,3 +248,6 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
 .interieur-identite, .interieur-lecons { border-left: 3px solid var(--or, #e6b450); padding-left: 8px; }
 .interieur-avis { border-left: 3px solid #7ac0b0; padding-left: 8px; }
 .interieur-requete { border-left: 3px solid #d0705a; padding-left: 8px; }
+
+#voir-pensees { border: 1px solid var(--bord); background: rgba(255,255,255,0.07); border-radius: 8px; padding: 4px 9px; font-size: 16px; opacity: 0.55; }
+#voir-pensees.actif { opacity: 1; background: rgba(230,180,80,0.25); }
