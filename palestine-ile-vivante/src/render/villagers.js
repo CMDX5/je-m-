@@ -57,6 +57,7 @@ export class Habitants3D {
       aide: new THREE.SpriteMaterial({ map: bulleTexture('♥', '#3f9a5a', '#fff'), depthTest: false }),
       malade: new THREE.SpriteMaterial({ map: bulleTexture('+', '#f0f0f0', '#2f8a4a'), depthTest: false }),
       fete: new THREE.SpriteMaterial({ map: bulleTexture('♪', '#e0b030', '#fff'), depthTest: false }),
+      pense: new THREE.SpriteMaterial({ map: bulleTexture('?', '#cfd8e8', '#334'), depthTest: false }),
     };
     for (const v of sim.habitants) this.ajouter(v);
 
@@ -213,6 +214,7 @@ export class Habitants3D {
       if (v.conversation) b = v.conversation.dispute ? 'dispute' : 'parle';
       else if (type === 'aider' && !v.path) b = 'aide';
       else if (type === 'fete') b = 'fete';
+      else if (v.statut === 'reflechit') b = 'pense';
       else if (v.malade) b = 'malade';
       f.bulle.visible = !!b;
       if (b) {

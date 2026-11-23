@@ -1,12 +1,12 @@
 {
   "name": "palestine-ile-vivante",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Simulation 3D d'un village insulaire où les habitants apprennent par eux-mêmes (Three.js + Claude)",
+  "description": "Simulation 3D d'un village insulaire où chaque habitant pense avec un modèle de langage (Three.js + Ollama/Claude)",
   "scripts": {
     "start": "node tools/serve.mjs",
-    "test": "node tests/simulation.test.mjs"
+    "test": "node tests/simulation.test.mjs && node tests/serveur.test.mjs"
   },
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^1.12.0"

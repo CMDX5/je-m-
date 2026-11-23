@@ -185,3 +185,13 @@ select option { background: #2c2822; }
 #panneau { top: 80px; }
 #fiche { max-height: calc(100% - 92px); }
 @media (max-width: 900px) { #panneau { top: auto; } }
+
+/* bandeau d'état de la pensée */
+#bandeau { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 9; max-width: min(640px, 92vw); background: var(--fond-2); border: 1px solid var(--bord); border-radius: 10px; padding: 8px 14px; font-size: 12.5px; line-height: 1.45; }
+#bandeau.alerte { border-color: rgba(224,96,79,0.6); }
+#bandeau code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; }
+#bandeau a, #intro a { color: var(--accent); }
+form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12.5px; }
+form.inline input { width: 64px; font: inherit; color: var(--texte); background: rgba(0,0,0,0.3); border: 1px solid var(--bord); border-radius: 6px; padding: 4px 6px; }
+.journal-e.pensee-e { opacity: 0.75; border-color: var(--doux); font-style: italic; }
+#intro code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; }

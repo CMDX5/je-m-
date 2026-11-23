@@ -34,9 +34,8 @@
     <nav id="onglets" role="tablist">
       <button data-onglet="village" class="actif">Village</button>
       <button data-onglet="habitants">Habitants</button>
-      <button data-onglet="conflits">Conflits <span class="badge" id="badge-conflits"></span></button>
-      <button data-onglet="assemblee">Assemblée <span class="badge" id="badge-assemblee"></span></button>
-      <button data-onglet="emergence">Émergence</button>
+      <button data-onglet="requetes">Demandes <span class="badge" id="badge-requetes"></span></button>
+      <button data-onglet="paroles">Paroles</button>
       <button data-onglet="journal">Journal</button>
     </nav>
     <div id="contenu"></div>
@@ -45,28 +44,27 @@
   <section id="fiche" hidden></section>
   <div id="etiquette" hidden></div>
   <div id="infobulle" hidden></div>
+  <div id="bandeau" hidden></div>
   <div id="toasts" aria-live="polite"></div>
 
   <div id="intro">
     <div class="carte">
       <h1>Palestine — Île Vivante</h1>
       <p class="sous">Une île côtière de la Méditerranée. Cinquante habitants. Un conseil : vous.</p>
-      <p>Personne ici n'a été programmé pour travailler, aimer, voler ou se disputer. Chaque habitant est né avec un corps qui a des besoins, un tempérament, deux instincts (manger, dormir) — et la capacité d'<em>apprendre</em> de ce qu'il vit, d'imiter les autres et de se transmettre ce qu'il sait.</p>
-      <p>Ils ont vécu leurs premiers jours seuls. Les métiers, les habitudes, les amitiés et les rancunes que vous allez découvrir sont nés de ces jours-là.</p>
+      <p>Personne ici n'a été programmé pour penser. Chaque habitant a un corps (faim, soif, fatigue, santé), un foyer, de l'argent, une famille, des voisins, un métier. Le reste — ce qu'il pense, ce qu'il dit, ce qu'il décide, ce qu'il retient, qui il apprécie ou non — vient de lui : chacun pense avec un modèle de langage, en français.</p>
+      <p>Il faut donc un modèle connecté : <b>gratuit</b> avec <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> sur votre machine (<code>ollama pull qwen2.5:3b</code>), ou un autre fournisseur (voir le README).</p>
       <ul>
-        <li><b>Observer</b> : cliquez sur un habitant pour lire ce qu'il pense, ce qu'il a appris, ses souvenirs.</li>
-        <li><b>Parler</b> : adressez-vous à lui ; s'il est connecté, Claude lui prête sa voix d'après son vécu.</li>
-        <li><b>Demander, aider</b> : une demande n'est pas un ordre, elle pèse selon la confiance qu'il vous accorde.</li>
-        <li><b>Arbitrer</b> : les différends naissent de torts réellement vécus.</li>
-        <li><b>Trancher</b> : l'assemblée se réunit quand les habitants ont quelque chose à dire.</li>
+        <li><b>Observer</b> : cliquez sur un habitant pour lire ses pensées et ses souvenirs, tels qu'il les écrit.</li>
+        <li><b>Parler</b> : adressez-vous à lui ; il décide quoi répondre, ou s'il vous répond.</li>
+        <li><b>Gouverner</b> : fixez salaires et prix, financez, sanctionnez, annoncez, ouvrez des chantiers, répondez à leurs demandes.</li>
       </ul>
       <p class="petit">Caméra : glisser pour tourner, clic droit pour se déplacer, molette pour zoomer · Double-clic sur un habitant pour le suivre · Espace : pause · Échap : désélectionner</p>
       <button id="commencer" class="principal">Entrer sur l'île</button>
-      <p class="petit avertissement">Simulation d'apprentissage, de comportement et de mémoire : les habitants sont fictifs et n'ont pas de conscience réelle.</p>
+      <p class="petit avertissement">Les habitants sont fictifs : leurs pensées sont produites par un modèle de langage, ils n'ont pas de conscience réelle.</p>
     </div>
   </div>
 
-  <div id="chargement">Les habitants vivent leurs premiers jours sur l'île…</div>
+  <div id="chargement">Chargement de l'île…</div>
 
   <script type="module" src="src/main.js"></script>
 </body>

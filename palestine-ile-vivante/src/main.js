@@ -8,7 +8,7 @@ import { creerTerrain, creerVegetation } from './render/terrain.js';
 import { Village } from './render/buildings.js';
 import { Habitants3D } from './render/villagers.js';
 import { Interface } from './ui/panel.js';
-import { Cerveau } from './sim/cerveau.js';
+import { Penseur } from './sim/penseur.js';
 import { nomComplet, libelleMetier } from './sim/villager.js';
 import { PLAZA } from './world/layout.js';
 import { heightAt } from './world/heightmap.js';
@@ -34,8 +34,7 @@ if (aCharger) {
   try { sim = Simulation.charger(lireStockage(CLE_SAUVEGARDE)); } catch (e) { console.warn('Sauvegarde illisible', e); }
 }
 const params = new URLSearchParams(location.search);
-const jours = params.has('histoire') ? Number(params.get('histoire')) : 10;
-if (!sim) sim = new Simulation({ seed: Number(params.get('graine')) || 2026 }).init({ prehistoire: jours });
+if (!sim) sim = new Simulation({ seed: Number(params.get('graine')) || 2026 }).init();
 
 // ---------- Rendu ----------
 const canvas = document.getElementById('scene');
@@ -116,14 +115,6 @@ const ui = new Interface(sim, {
     ecrireStockage(CLE_A_CHARGER, '1');
     location.reload();
   },
-  parler: async (id, message) => {
-    const v = sim.habitant(id);
-    let rep = await cerveau.parler(id, message);
-    let source = 'Claude';
-    if (!rep) { rep = sim.reponseLocale(v, message); source = 'locale'; }
-    sim.recevoirParole(id, message, rep, source);
-    ui.rendreFiche(true);
-  },
   recommencer: () => {
     if (!confirm('Générer une nouvelle île ? La partie en cours non sauvegardée sera perdue.')) return;
     const url = new URL(location.href);
@@ -131,18 +122,13 @@ const ui = new Interface(sim, {
     location.href = url.toString();
   },
 });
-// ---------- Claude : réflexion du soir et parole ----------
-const cerveau = new Cerveau(sim);
-ui.cerveau = cerveau;
-cerveau.verifier();
-sim.on('reflexion', async (ids) => {
-  for (const id of ids) {
-    const d = cerveau.disponible ? await cerveau.reflechir(id) : null;
-    sim.appliquerReflexion(id, d || sim.reflexionLocale(sim.habitant(id)), d ? 'Claude' : 'locale');
-  }
-});
+// ---------- Pensée des habitants (modèle de langage) ----------
+const SEUIL_ATTENTE = 12;
+const penseur = new Penseur(sim);
+ui.penseur = penseur;
+penseur.verifier();
 
-window.__ile = { sim, ui, camera, controls, cerveau, select: (id) => ui.actions.selectionner(id, true) };
+window.__ile = { sim, ui, camera, controls, penseur, select: (id) => ui.actions.selectionner(id, true) };
 
 const raycaster = new THREE.Raycaster();
 const souris = new THREE.Vector2();
@@ -215,8 +201,11 @@ const tmp = new THREE.Vector3();
 function boucle() {
   const dt = Math.min(0.1, horloge.getDelta());
   tAnim += dt;
-  if (vitesse > 0) sim.update(dt * vitesse);
-  sim.vitesseAffichage = vitesse;
+  // le temps s'arrête tant que trop d'habitants n'ont pas fini de réfléchir
+  const enPause = vitesse > 0 && sim.nbAttente() > SEUIL_ATTENTE;
+  if (vitesse > 0 && !enPause) sim.update(dt * vitesse);
+  sim.vitesseAffichage = enPause ? 0 : vitesse;
+  penseur.tick();
 
   const meteo = sim.meteo.tempete > sim.temps ? 'tempete' : null;
   env.update(sim.heure(), tAnim, meteo);
@@ -264,7 +253,7 @@ function boucle() {
     }
   } else etiquette.hidden = true;
 
-  ui.tick(performance.now(), vitesse);
+  ui.tick(performance.now(), vitesse, enPause);
   renderer.render(scene, camera);
   requestAnimationFrame(boucle);
 }
