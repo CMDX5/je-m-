@@ -17,7 +17,7 @@ Voici les règles de ce monde, identiques pour chacun :
 
 const FORMAT = `
 
-FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Reste bref : quelques phrases au plus par habitant. Exemple de forme : {"habitants": [{"id": 3, "pensee": "...", "humeur": 60, "action": "travailler", "parole": ""}]}`;
+FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Ta pensée et ta parole peuvent être aussi longues ou aussi courtes que tu veux. Forme seulement (les "..." sont à remplacer par tes mots et ton choix) : {"habitants": [{"id": 3, "pensee": "...", "humeur": 0, "action": "...", "parole": "..."}]}`;
 
 const MESSAGES = {
   not_granted: "Vous n'avez pas autorisé cette page à utiliser Claude. Rechargez la page pour qu'elle vous le redemande.",
@@ -43,7 +43,7 @@ export function promptLot(sim, ids) {
 export const TAILLE_BILAN = 4;
 export function promptLotBilan(sim, ids) {
   const blocs = ids.map((id) => `=== Habitant id=${id} ===\n${construirePrompt(sim, sim.habitant(id), 'bilan')}`);
-  return `${CONSIGNE}${SYSTEME_BILAN}\n\nFORMAT DE TA RÉPONSE : uniquement un objet JSON {"habitants": [...]}, un objet par habitant, dans l'ordre donné, avec les clés "id", "resume", "identite", "lecons".\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par l'objet JSON (${ids.length} habitants).`;
+  return `${CONSIGNE}${SYSTEME_BILAN}\n\nFORMAT DE TA RÉPONSE : uniquement un objet JSON {"habitants": [...]}, un objet par habitant, dans l'ordre donné, avec les clés "id", "resume", "identite", "lecons", "questions".\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par l'objet JSON (${ids.length} habitants).`;
 }
 export function appliquerLotBilan(sim, ids, rep) {
   const liste = Array.isArray(rep) ? rep : Array.isArray(rep?.habitants) ? rep.habitants : [];

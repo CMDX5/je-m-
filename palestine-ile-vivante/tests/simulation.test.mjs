@@ -24,9 +24,10 @@ assert.equal(sim.habitant(0).statut, 'agit');
 
 // Perception : en français, sans consigne de comportement
 const prompt = sim.construirePrompt(5);
+const promptLotTexte = (await import('../src/sim/penseur-claude.js')).promptLot(sim, [5]);
 assert.ok(/Ce que tu ressens :/.test(prompt) && /Le village :/.test(prompt) && /Réponds par le JSON/.test(prompt));
 assert.ok(!/\/100/.test(prompt), 'des sensations, pas des chiffres');
-for (const consigne of ['Tu peux aider', 'de préférence', 'Que fais-tu', 'te presse', 'enfants et jeunes']) assert.ok(!prompt.includes(consigne) && !SYSTEME.includes(consigne), `aucune consigne de comportement : « ${consigne} »`);
+for (const consigne of ['Tu peux aider', 'de préférence', 'Que fais-tu', 'te presse', 'enfants et jeunes', 'en quelques mots', 'Reste bref', '"action": "travailler"']) assert.ok(!prompt.includes(consigne) && !SYSTEME.includes(consigne) && !promptLotTexte.includes(consigne), `aucune consigne de comportement : « ${consigne} »`);
 assert.ok(prompt.length < 2600, `perception compacte (${prompt.length} caractères)`);
 
 // Acheter avec ses propres mots (« des rations », « du pain ») : le marchand comprend
@@ -56,7 +57,17 @@ for (const [mot, attendu] of [['rations', 'nourriture'], ['du pain', 'nourriture
   sim.appliquerBilan(v.id, { resume: 'Une journée.', identite: 'Quelqu\'un qui doute encore.', lecons: 'Ici, il faut demander.' });
   const fin = sim.interieur.slice(n1).map((e) => e.type);
   assert.deepEqual(fin, ['bilan', 'identite', 'lecons']);
+
   assert.equal(sim.interieur.at(-2).avant, 'Quelqu\'un qui doute.', 'on voit comment il se décrivait avant');
+  sim.appliquerBilan(v.id, { resume: 'Encore une journée.', identite: 'Quelqu\'un qui doute encore.', lecons: 'Ici, il faut demander.', questions: 'Est-ce que je suis à ma place ?' });
+  assert.equal(v.questions, 'Est-ce que je suis à ma place ?');
+  assert.equal(sim.interieur.at(-1).type, 'questions');
+  sim.appliquerBilan(v.id, { resume: 'Une autre.', questions: '' });
+  assert.equal(v.questions, '', 'il peut effacer une question qui ne l\'occupe plus');
+  const pensee = 'x'.repeat(900);
+  const w2 = sim.habitants.find((x) => x.statut === 'attend' && x.age > 16);
+  sim.marquerEnvoye(w2.id); sim.appliquer(w2.id, { pensee, humeur: 50, action: 'rien', parole: '' });
+  assert.equal(w2.pensee.length, 900, 'plus de place pour une longue pensée');
 }
 
 // --- Cinq jours avec des décisions tirées au hasard (fixture) ---

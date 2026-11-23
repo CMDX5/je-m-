@@ -399,25 +399,25 @@ export class Simulation {
     v.evenements.splice(0, v.evenementsPris || 0);
     v.evenementsPris = 0;
     v.urgence = '';
-    v.pensee = clip(d.pensee, 400);
+    v.pensee = clip(d.pensee, 1200);
     if (Number.isFinite(Number(d.humeur))) v.humeur = clamp(Math.round(Number(d.humeur)), 0, 100);
     if (v.pensee) {
       this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
       this.emit('pensee', { id: v.id, texte: v.pensee });
       if (penseePersonnelle(v.pensee, this.habitants, v)) this.vivre(v, 'pensee', v.pensee);
     }
-    const souvenir = clip(d.souvenir, 300);
+    const souvenir = clip(d.souvenir, 600);
     retenir(v, this.temps, souvenir);
     if (souvenir) this.vivre(v, 'souvenir', souvenir);
     const cibleAvis = d.avis_sur ? this.personne(d.avis_sur) : null;
     if (cibleAvis && cibleAvis !== v && d.avis) {
       const avant = v.avis[cibleAvis.id]?.texte;
-      v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 200) };
+      v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 500) };
       if (v.avis[cibleAvis.id].texte !== avant) this.vivre(v, 'avis', v.avis[cibleAvis.id].texte, { sur: cibleAvis.id, avant });
     }
-    if (d.identite && String(d.identite).trim()) this.changerIdentite(v, clip(d.identite, 260));
+    if (d.identite && String(d.identite).trim()) this.changerIdentite(v, clip(d.identite, 600));
     if (d.requete_conseil && String(d.requete_conseil).trim()) {
-      this.requetes.push({ id: this.nextRequete++, de: v.id, texte: clip(d.requete_conseil, 400), t: this.temps, repondue: false });
+      this.requetes.push({ id: this.nextRequete++, de: v.id, texte: clip(d.requete_conseil, 800), t: this.temps, repondue: false });
       this.vivre(v, 'requete', this.requetes.at(-1).texte);
       v.stats.requetes++;
       this.stats.requetes++;
@@ -439,14 +439,20 @@ export class Simulation {
   appliquerBilan(id, d) {
     const v = this.habitant(id);
     if (!v || !d) return;
-    if (d.resume) { v.resume = clip(d.resume, 700); this.vivre(v, 'bilan', v.resume); }
-    if (d.identite) this.changerIdentite(v, clip(d.identite, 260));
-    if (typeof d.lecons === 'string' && clip(d.lecons, 700) !== v.lecons) {
+    if (d.resume) { v.resume = clip(d.resume, 1500); this.vivre(v, 'bilan', v.resume); }
+    if (d.identite) this.changerIdentite(v, clip(d.identite, 600));
+    if (typeof d.lecons === 'string' && clip(d.lecons, 1500) !== v.lecons) {
       const avant = v.lecons;
-      v.lecons = clip(d.lecons, 700);
+      v.lecons = clip(d.lecons, 1500);
       if (v.lecons) this.vivre(v, 'lecons', v.lecons, { avant });
     }
-    v.souvenirs = v.souvenirs.slice(-6);
+    // ce qu'il se demande : il peut aussi bien le laisser vide, ou l'effacer
+    if (typeof d.questions === 'string' && clip(d.questions, 1500) !== (v.questions || '')) {
+      const avant = v.questions || '';
+      v.questions = clip(d.questions, 1500);
+      if (v.questions) this.vivre(v, 'questions', v.questions, { avant });
+    }
+    v.souvenirs = v.souvenirs.slice(-12);
     v.derniereBilan = this.temps;
     v.bilanDu = false;
   }
@@ -479,7 +485,7 @@ export class Simulation {
     const action = ACTIONS.includes(d.action) ? d.action : null;
     if (!action) return this.invalide(v, "cette action n'existe pas");
     const duree = Number.isFinite(Number(d.duree_minutes)) ? Number(d.duree_minutes) : 0;
-    const parole = clip(d.parole, 400);
+    const parole = clip(d.parole, 800);
     const ton = clip(d.ton, 24).toLowerCase();
     const objet = nomObjet(d.objet) || (action === 'acheter' ? 'nourriture' : null);
     const qte = clamp(Number(d.quantite) || 1, 0, 200);

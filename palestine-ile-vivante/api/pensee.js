@@ -19,7 +19,7 @@ async function appeler(f, modele, prompt, avecReflexionCourte) {
     method: 'POST',
     headers: { Authorization: `Bearer ${f.cle}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: modele, temperature: 0.8, max_tokens: 4000, response_format: { type: 'json_object' },
+      model: modele, temperature: 0.8, max_tokens: 6000, response_format: { type: 'json_object' },
       ...reflexion,
       messages: [{ role: 'user', content: prompt }],
     }),

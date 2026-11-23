@@ -251,3 +251,4 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
 
 #voir-pensees { border: 1px solid var(--bord); background: rgba(255,255,255,0.07); border-radius: 8px; padding: 4px 9px; font-size: 16px; opacity: 0.55; }
 #voir-pensees.actif { opacity: 1; background: rgba(230,180,80,0.25); }
+.interieur-questions { border-left: 3px solid #b48ae0; padding-left: 8px; }

@@ -122,14 +122,19 @@ console.log('En ligne : clés Groq et Gemini vérifiées, modèles choisis, limi
     if (url !== 'api/pensee') return avantFetch(url, opt);
     const corps = JSON.parse(opt.body);
     assert.match(corps.prompt, /"lecons"/, 'le bilan propose d\'écrire ce qu\'on a compris, sans exemple imposé');
+    assert.match(corps.prompt, /"questions"/, 'le bilan laisse une case libre pour ce qu\'on se demande');
+    assert.ok(!/Pourquoi|métier|à ta place/i.test(corps.prompt.split('Réponds uniquement')[1] || ''), 'aucune question ni exemple suggéré');
     const ids = [...corps.prompt.matchAll(/=== Habitant id=(\d+) ===/g)].map((m) => Number(m[1]));
-    return { ok: true, status: 200, json: async () => ({ texte: JSON.stringify({ habitants: ids.map((id) => ({ id, resume: 'Une journée.', identite: 'Moi.', lecons: `Leçon de ${id}.` })) }) }) };
+    return { ok: true, status: 200, json: async () => ({ texte: JSON.stringify({ habitants: ids.map((id) => ({ id, resume: 'Une journée.', identite: 'Moi.', lecons: `Leçon de ${id}.`, questions: id % 2 ? `Pourquoi ${id} ?` : '' })) }) }) };
   };
   p2.tick();
   await attendre();
   const ecrits = sim2.habitants.slice(0, 3);
   assert.ok(ecrits.every((v) => v.lecons === `Leçon de ${v.id}.` && v.resume && !v.bilanDu), 'chacun garde SA leçon');
   assert.match(sim2.construirePrompt(ecrits[0].id), /Ce que tu as compris de la vie ici : Leçon de/, 'il relit sa leçon au moment de décider');
+  const avecQ = ecrits.filter((v) => v.questions);
+  assert.ok(avecQ.length > 0 && avecQ.length < ecrits.length, 'une case vide reste vide : on ne force personne à se poser des questions');
+  assert.match(sim2.construirePrompt(avecQ[0].id), /Ce que tu te demandes en ce moment : Pourquoi/, 'il relit ses questions au moment de décider');
   globalThis.fetch = avantFetch;
   console.log('Bilan du soir : chaque habitant écrit et relit ce qu\'il a compris. OK');
 }

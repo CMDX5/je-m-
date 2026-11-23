@@ -323,7 +323,7 @@ export class Interface {
   vueParoles() {
     const s = this.sim;
     const f = this.filtreParoles || 'flux';
-    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
+    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['questions', 'Ce qu\'ils se demandent']];
     let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
     if (f === 'flux' || f === 'fluxtout') {
     out += `<p class="note">${f === 'flux' ? 'Seulement ce qui est dit à voix haute.' : 'Tout ce qu\'ils disent et pensent, y compris les pensées de simple routine.'}</p>`;
@@ -341,9 +341,9 @@ export class Interface {
       return out;
     }
     out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans « Ce qui se dit ».</p>`;
-    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons' }[f] || (() => true);
+    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons', questions: (e) => e.type === 'questions' }[f] || (() => true);
     const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
-    if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
+    if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' || f === 'questions' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
     const nom = (id) => s.habitant(id)?.prenom || '?';
     for (const e of liste) {
       const qui = `<b class="lien">${esc(nom(e.id))}</b>`;
@@ -357,6 +357,7 @@ export class Interface {
         avis: `${qui}, à propos de ${sur} : « ${esc(e.texte)} »${avant}`,
         identite: `${qui} se décrit : « ${esc(e.texte)} »${avant}`,
         lecons: `${qui} a compris : « ${esc(e.texte)} »${avant}`,
+        questions: `${qui} se demande : « ${esc(e.texte)} »${avant}`,
         bilan: `${qui}, avant de dormir : « ${esc(e.texte)} »`,
         requete: `${qui} écrit au conseil : « ${esc(e.texte)} »`,
       }[e.type] || `${qui} : « ${esc(e.texte)} »`;
@@ -541,6 +542,7 @@ export class Interface {
       <h3>Mémoire (écrite par ${F ? 'elle' : 'lui'})</h3>
       ${v.resume ? `<div class="note"><b>Bilan :</b> ${esc(v.resume)}</div>` : ''}
       ${v.lecons ? `<div class="note"><b>Ce qu'il a compris :</b> ${esc(v.lecons)}</div>` : ''}
+      ${v.questions ? `<div class="note"><b>Ce qu'il se demande :</b> ${esc(v.questions)}</div>` : ''}
       ${souvenirs.length ? souvenirs.map((m) => `<div class="souvenir"><i style="background:var(--accent)"></i><span>${esc(m.texte)}<small>${esc(s.horodatage(m.t))}</small></span></div>`).join('') : '<p class="note">Aucun souvenir noté pour l’instant.</p>'}
 
       <h3>Ce qu'${F ? 'elle' : 'il'} pense des autres</h3>

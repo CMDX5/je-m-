@@ -50,12 +50,16 @@ Réponds uniquement par un objet JSON :
 - "ton" : le ton de ta parole, en un mot à toi.
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
-- "identite" : si tu veux réécrire en quelques mots qui tu es (facultatif).
+- "identite" : si tu veux écrire ou réécrire qui tu es (facultatif).
 - "requete_conseil" : un message au conseil du village, si tu as quelque chose à lui demander ou dire (facultatif).`;
 
 export const SYSTEME_BILAN = `Tu es un habitant d'un village sur une île de la Méditerranée. Tu t'apprêtes à dormir. Tu ne sais que ce qui est écrit dans le message. N'invente rien. Tu parles français, à la première personne.
 
-Réponds uniquement par un objet JSON : "resume" (ce que tu gardes en mémoire de ta vie récente, 5 phrases au plus), "identite" (qui tu es, selon toi, en une ou deux phrases) et "lecons" (ce que tu as compris jusqu'ici de la vie sur cette île, d'après ce que tu as vécu, 5 phrases au plus ; tu peux garder, corriger ou oublier ce que tu pensais avant).`;
+Réponds uniquement par un objet JSON, avec les mots que tu veux et la longueur que tu veux :
+- "resume" : ce que tu gardes en mémoire de ta vie récente.
+- "identite" : qui tu es, selon toi.
+- "lecons" : ce que tu as compris jusqu'ici de la vie sur cette île, d'après ce que tu as vécu ; tu peux garder, corriger ou oublier ce que tu pensais avant.
+- "questions" : ce que tu te demandes en ce moment, si quelque chose t'interroge ; laisse vide sinon.`;
 
 export const SCHEMA_DECISION = {
   type: 'object',
@@ -85,10 +89,10 @@ export const SCHEMA_BILAN = {
   type: 'object',
   additionalProperties: false,
   required: ['resume', 'identite'],
-  properties: { resume: { type: 'string' }, identite: { type: 'string' }, lecons: { type: 'string' } },
+  properties: { resume: { type: 'string' }, identite: { type: 'string' }, lecons: { type: 'string' }, questions: { type: 'string' } },
 };
 
 export const TYPES = {
-  decision: { systeme: SYSTEME, schema: SCHEMA_DECISION, maxTokens: 400 },
-  bilan: { systeme: SYSTEME_BILAN, schema: SCHEMA_BILAN, maxTokens: 400 },
+  decision: { systeme: SYSTEME, schema: SCHEMA_DECISION, maxTokens: 900 },
+  bilan: { systeme: SYSTEME_BILAN, schema: SCHEMA_BILAN, maxTokens: 1200 },
 };

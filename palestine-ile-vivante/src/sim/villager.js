@@ -22,6 +22,7 @@ export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
     identite: '',
     resume: '',
     lecons: '', // ce qu'il a compris de la vie ici, écrit par lui le soir
+    questions: '', // ce qu'il se demande en ce moment, écrit par lui le soir (souvent vide)
     souvenirs: [], // { t, texte }
     avis: {}, // id -> { t, texte }
     dialogue: [], // échanges avec le conseil
@@ -57,8 +58,8 @@ export function noter(v, t, texte) {
 }
 
 export function retenir(v, t, texte) {
-  const s = String(texte || '').trim().slice(0, 300);
+  const s = String(texte || '').trim().slice(0, 600);
   if (!s) return;
   v.souvenirs.push({ t, texte: s });
-  if (v.souvenirs.length > 60) v.souvenirs.shift();
+  if (v.souvenirs.length > 100) v.souvenirs.shift();
 }

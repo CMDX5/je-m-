@@ -69,8 +69,9 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     if (v.identite) L.push(`Ce que tu écrivais de toi : ${v.identite}`);
     if (v.resume) L.push(`Ton dernier résumé : ${v.resume}`);
     if (v.lecons) L.push(`Ce que tu pensais avoir compris de la vie ici : ${v.lecons}`);
+    if (v.questions) L.push(`Ce que tu te demandais : ${v.questions}`);
     L.push('Ce que tu as retenu récemment :');
-    for (const s of v.souvenirs.slice(-14)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
+    for (const s of v.souvenirs.slice(-24)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
     const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => `${sim.habitant(Number(id)).prenom} : ${a.texte}`);
     if (avis.length) L.push(`Tes avis sur les autres : ${avis.join(' ; ')}`);
     return L.join('\n');
@@ -102,11 +103,12 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     for (const e of ev) L.push(`- ${e.texte}`);
   }
 
-  const souv = v.souvenirs.slice(-12);
-  if (v.resume || v.lecons || souv.length) {
+  const souv = v.souvenirs.slice(-18);
+  if (v.resume || v.lecons || v.questions || souv.length) {
     L.push('');
     if (v.resume) L.push(`Ce que tu retiens de ta vie : ${v.resume}`);
     if (v.lecons) L.push(`Ce que tu as compris de la vie ici : ${v.lecons}`);
+    if (v.questions) L.push(`Ce que tu te demandes en ce moment : ${v.questions}`);
     if (souv.length) {
       L.push('Tes souvenirs récents :');
       for (const s of souv) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
