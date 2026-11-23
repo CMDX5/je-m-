@@ -14,7 +14,7 @@ globalThis.fetch = async (url, opt = {}) => {
   const h = opt.headers || {};
   const rep = (statut, corps) => ({ ok: statut < 300, status: statut, json: async () => corps });
   if (url === 'api/modeles') {
-    if (h['x-fournisseur'] === 'groq') return h['x-cle'] === 'gsk_bonne' ? rep(200, { modeles: ['whisper-large-v3', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile'] }) : rep(401, { erreur: 'clé refusée' });
+    if (h['x-fournisseur'] === 'groq') return h['x-cle'] === 'gsk_bonne' ? rep(200, { modeles: ['whisper-large-v3', 'allam-2-7b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile'] }) : rep(401, { erreur: 'clé refusée' });
     if (h['x-fournisseur'] === 'gemini') return h['x-cle'] === 'AIza_bonne' ? rep(200, { modeles: ['text-embedding-004', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'imagen-3.0'] }) : rep(401, { erreur: 'clé refusée' });
   }
   if (url === 'api/pensee') {
@@ -39,7 +39,7 @@ assert.equal(await p.enregistrerCle('gsk_mauvaise', 'groq'), false, 'mauvaise cl
 assert.equal(stock['ile-vivante:groq'], undefined, 'une clé refusée est oubliée');
 assert.equal(await p.enregistrerCle('gsk_bonne', 'groq'), true);
 assert.equal(p.modele, 'llama-3.3-70b-versatile', 'le meilleur modèle disponible est choisi');
-assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'], 'les modèles non conversationnels sont écartés');
+assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'], 'seuls les modèles connus sont utilisés');
 p.tick();
 assert.equal(p.actifs, 1, 'un groupe part réfléchir tout seul');
 await attendre();
@@ -53,6 +53,8 @@ assert.deepEqual(p.entrees.map((e) => e.principal), [true, false], 'le petit mod
 // limite par minute sur le bon modèle : courte pause, sans alarmer le joueur ni passer au petit modèle
 mode = 'limite';
 await relancer(p);
+assert.equal(sim.habitants.filter((v) => v.statut === 'attend' && v.priorite).length, 12, 'modèle indisponible : les 12 habitants gardent leur tour, en tête de file');
+assert.ok(sim.habitants.every((v) => !v.echecs), 'personne n\'est réduit à ne rien faire');
 assert.ok(p.pauses.get('groq|llama-3.3-70b-versatile') - performance.now() > 6000, 'limite gratuite : le modèle souffle');
 assert.equal(p.derniereErreur, '', 'pause courte : pas de message');
 const n = envois.length;
@@ -76,8 +78,8 @@ assert.match(p.derniereErreur, /reprennent dans \d+ min.*clé Gemini/, 'Groq ép
 // clé Gemini ajoutée : les habitants continuent avec Gemini, Flash-Lite d'abord
 assert.equal(await p.enregistrerCle('AIza_mauvaise', 'gemini'), false, 'mauvaise clé Gemini refusée');
 assert.equal(await p.enregistrerCle('AIza_bonne', 'gemini'), true);
-assert.deepEqual(p.entrees.filter((e) => e.f === 'gemini').map((e) => e.m), ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'], 'Gemini : modèles triés par quota gratuit');
-assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'llama-3.1-8b-instant', 'gemini-2.5-pro'], 'les bons modèles d\'abord, les autres en secours');
+assert.deepEqual(p.entrees.filter((e) => e.f === 'gemini').map((e) => e.m), ['gemini-2.5-flash-lite', 'gemini-2.5-flash'], 'Gemini : Flash-Lite puis Flash, rien d\'autre');
+assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'llama-3.1-8b-instant'], 'les bons modèles d\'abord, les autres en secours');
 for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p.pauser({ f: 'groq', m }, 3600e3);
 const avant = p.stats.ok;
 await relancer(p);

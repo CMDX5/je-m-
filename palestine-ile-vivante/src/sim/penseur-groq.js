@@ -74,7 +74,7 @@ export class PenseurGroq {
     this.pret = false;
     this.actifs = 0;
     this.groupe = [];
-    this.stats = { appels: 0, ok: 0, echecs: 0, ms: 0 };
+    this.stats = { appels: 0, ok: 0, echecs: 0, renvois: 0, ms: 0 };
     this.parFournisseur = Object.fromEntries(ORDRE.map((f) => [f, 0]));
     this.derniereErreur = '';
     this.erreurs = {}; // par fournisseur
@@ -106,8 +106,9 @@ export class PenseurGroq {
       const d = await r.json().catch(() => ({}));
       if (r.status === 401) { this.erreurs[f] = `${nom} refuse cette clé. Vérifiez-la ou créez-en une nouvelle.`; this.oublierCle(f, false); return []; }
       if (!r.ok) { this.erreurs[f] = d.erreur || `${nom} injoignable pour le moment.`; return []; }
+      // seulement des modèles connus pour tenir nos longs messages en français (les autres échouaient un par un)
       const dispo = (d.modeles || []).filter((m) => !FOURNISSEURS[f].exclus.test(m));
-      const liste = f === 'gemini' ? trierGemini(dispo) : [...FOURNISSEURS.groq.preferences.filter((m) => dispo.includes(m)), ...dispo.filter((m) => !FOURNISSEURS.groq.preferences.includes(m))];
+      const liste = f === 'gemini' ? trierGemini(dispo).filter((m) => FOURNISSEURS.gemini.principaux.test(m)) : FOURNISSEURS.groq.preferences.filter((m) => dispo.includes(m));
       this.erreurs[f] = liste.length ? '' : `Aucun modèle de discussion disponible sur ce compte ${nom}.`;
       return liste.map((m) => ({ f, m, principal: FOURNISSEURS[f].principaux.test(m) }));
     } catch {
@@ -229,8 +230,9 @@ export class PenseurGroq {
       const ms = performance.now() - t0;
       this.stats.ms = this.stats.ms ? this.stats.ms * 0.7 + ms * 0.3 : ms;
     } catch (err) {
-      for (const id of ids) sim.echec(id);
-      this.stats.echecs += ids.length;
+      // le modèle n'a rien dit : ces habitants n'ont pas pensé, ils attendent le prochain modèle
+      for (const id of ids) sim.remettre(id);
+      this.stats.renvois += ids.length;
       if (err.silencieux) {
         this.derniereErreur = this.disponible ? '' : 'Aucun modèle ne convient sur ces comptes.';
       } else if (err.attente) {

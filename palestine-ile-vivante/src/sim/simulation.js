@@ -339,6 +339,15 @@ export class Simulation {
     v.evenementsPris = v.evenements.length;
     v.priorite = false;
   }
+  // Le modèle était indisponible (surchargé, en pause) : l'habitant n'a pas encore pensé,
+  // il repasse en tête de file pour le prochain modèle, sans perdre son tour.
+  remettre(id) {
+    const v = this.habitant(id);
+    if (!v || v.statut !== 'reflechit') return;
+    v.statut = 'attend';
+    v.priorite = true;
+  }
+
   // Le modèle n'a pas répondu : l'habitant reste là, sans rien faire de précis.
   echec(id) {
     const v = this.habitant(id);
