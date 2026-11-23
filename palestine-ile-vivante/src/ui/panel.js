@@ -107,13 +107,28 @@ export class Interface {
     // bandeau d'état de la pensée
     const b = $('#bandeau');
     const p = this.penseur;
-    if (p && !p.disponible) {
-      b.hidden = false; b.className = 'alerte';
-      b.innerHTML = `<b>Les habitants ne peuvent pas penser.</b> ${esc(p.derniereErreur || 'Aucun modèle de langage connecté.')}<br><small>Gratuit : installez <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, puis <code>ollama pull qwen2.5:3b</code>, et relancez <code>npm start</code>.</small>`;
+    let html = '', cls = '';
+    if (p?.mode === 'claude') {
+      const n = s.demandes().length;
+      if (!p.pret) html = 'Connexion à Claude…';
+      else if (!p.disponible) { cls = 'alerte'; html = `<b>Les habitants ne peuvent pas penser.</b> ${esc(p.derniereErreur)}`; }
+      else if (p.actifs) html = `⏳ ${p.groupe.length} habitant${p.groupe.length > 1 ? 's' : ''} réfléchi${p.groupe.length > 1 ? 'ssent' : 't'} avec Claude…`;
+      else if (n) {
+        cls = enPause ? 'attente' : '';
+        html = `<span>${enPause ? 'Le temps attend : ' : ''}${n} habitant${n > 1 ? 's' : ''} doi${n > 1 ? 'vent' : 't'} décider.</span><button class="btn principal" data-reflechir type="button">Laisser réfléchir</button>${p.derniereErreur ? `<small>${esc(p.derniereErreur)}</small>` : ''}`;
+      } else if (p.derniereErreur) html = esc(p.derniereErreur);
+    } else if (p && !p.disponible) {
+      cls = 'alerte';
+      html = `<b>Les habitants ne peuvent pas penser.</b> ${esc(p.derniereErreur || 'Aucun modèle de langage connecté.')}<br><small>Gratuit : installez <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, puis <code>ollama pull qwen2.5:3b</code>, et relancez <code>npm start</code>.</small>`;
     } else if (enPause) {
-      b.hidden = false; b.className = '';
-      b.innerHTML = `⏳ Le temps attend que ${s.nbAttente()} habitant(s) aient fini de réfléchir (${p?.stats.appels ? `${Math.round((p.stats.ms || 0) / 100) / 10} s par pensée` : '…'}).`;
-    } else b.hidden = true;
+      html = `⏳ Le temps attend que ${s.nbAttente()} habitant(s) aient fini de réfléchir (${p?.stats.appels ? `${Math.round((p.stats.ms || 0) / 100) / 10} s par pensée` : '…'}).`;
+    }
+    b.hidden = !html;
+    if (b.dataset.cache !== cls + html) { b.dataset.cache = cls + html; b.className = cls; b.innerHTML = html; }
+    if (!b.dataset.ecoute) {
+      b.dataset.ecoute = '1';
+      b.addEventListener('click', (e) => { if (e.target.closest('[data-reflechir]')) this.penseur?.reflechir?.(); });
+    }
   }
 
   majBadges() {
@@ -197,7 +212,9 @@ export class Interface {
         <button class="btn" data-commerce="acheterPierre" ${s.res.pieces < 20 ? 'disabled' : ''}>12 pierre ← 20 pièces</button>
         <button class="btn" data-commerce="acheterRemedes" ${s.res.pieces < 30 ? 'disabled' : ''}>8 remèdes ← 30 pièces</button></div>`;
     } else out += `<p class="note">Aucun navire à quai.</p>`;
-    if (p) {
+    if (p?.mode === 'claude') {
+      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Claude, sur votre compte : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse. Chaque toucher sur « Laisser réfléchir » fait penser jusqu'à 16 habitants, chacun d'après sa propre perception.` : esc(p.derniereErreur)}</p>`;
+    } else if (p) {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Fournisseur : <b>${esc(p.fournisseur)}</b> (${esc(p.modele)}) · ${p.stats.ok} pensées reçues, ${p.stats.echecs} échecs · ${(p.stats.ms / 1000).toFixed(1)} s en moyenne · ${p.actifs} en cours.` : 'Aucun modèle connecté.'}</p>`;
     }
     out += `<h3>Partie</h3><div class="boutons"><button class="btn" data-action="sauver">Sauvegarder</button><button class="btn" data-action="charger">Charger</button><button class="btn danger" data-action="recommencer">Nouvelle île</button></div>`;

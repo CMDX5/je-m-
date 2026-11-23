@@ -52,7 +52,7 @@ function quiEstLa(sim, v) {
   return out;
 }
 
-export function construirePrompt(sim, v, type = 'decision') {
+export function construirePrompt(sim, v, type = 'decision', { commun = true } = {}) {
   const h = sim.heure();
   const hh = Math.floor(h), mm = String(Math.floor((h - hh) * 60)).padStart(2, '0');
   const foyer = sim.foyers[v.foyer];
@@ -112,14 +112,22 @@ export function construirePrompt(sim, v, type = 'decision') {
   const avis = [...concernes].filter((id) => v.avis[id]).map((id) => `${sim.habitant(id).prenom} : ${v.avis[id].texte}`);
   if (avis.length) L.push(`Ton avis sur ceux qui sont là : ${avis.join(' ; ')}.`);
 
+  if (!commun) return L.join('\n');
   L.push('');
+  L.push(infosVillage(sim));
+  L.push('');
+  L.push('Que fais-tu maintenant ? Réponds par le JSON.');
+  return L.join('\n');
+}
+
+// Informations publiques du village (les mêmes pour tous).
+export function infosVillage(sim) {
+  const L = [];
   L.push('Le village :');
   L.push(`- Marché : ${Math.round(sim.res.nourriture)} ration(s) à vendre, ${sim.prix} pièce(s) la ration ; remède : ${sim.prixRemede} pièces. Eau gratuite à la source.`);
   L.push(`- Le conseil paie ${sim.salaire} pièce(s) par heure travaillée.${sim.projet && !sim.projet.enAttente ? ` Un chantier est ouvert : ${sim.projet.nom}.` : ''}${sim.navire ? ' Un navire marchand est au port.' : ''}`);
   const libres = sim.maisonsLibres();
   if (libres.length) L.push(`- Maison(s) libre(s) : ${libres.map((b) => `${b.id} (${b.nom})`).join(', ')}.`);
   L.push(`- Les habitants : ${sim.roster()}`);
-  L.push('');
-  L.push('Que fais-tu maintenant ? Réponds par le JSON.');
   return L.join('\n');
 }

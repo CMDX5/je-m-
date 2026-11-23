@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --fond: rgba(28, 26, 22, 0.86);
   --fond-2: rgba(44, 40, 34, 0.92);
   --bord: rgba(255, 240, 210, 0.14);
@@ -195,3 +196,10 @@ form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; fon
 form.inline input { width: 64px; font: inherit; color: var(--texte); background: rgba(0,0,0,0.3); border: 1px solid var(--bord); border-radius: 6px; padding: 4px 6px; }
 .journal-e.pensee-e { opacity: 0.75; border-color: var(--doux); font-style: italic; }
 #intro code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; }
+
+#bandeau { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; text-align: center; }
+#bandeau[hidden] { display: none !important; }
+#bandeau.attente { border-color: var(--accent); }
+#bandeau small { flex-basis: 100%; color: var(--doux); }
+#bandeau .btn { font-size: 14px; padding: 8px 14px; }
+@media (max-width: 900px) { #bandeau { top: auto; bottom: calc(42% + 18px); } }
