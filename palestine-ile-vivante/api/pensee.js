@@ -13,6 +13,8 @@ export default async function handler(req, res) {
       headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: modele, temperature: 0.8, max_tokens: 4000, response_format: { type: 'json_object' },
+        // les modèles gpt-oss « réfléchissent » avant de répondre : ces jetons comptent dans le quota gratuit
+        ...(/gpt-oss/.test(modele) ? { reasoning_effort: 'low' } : {}),
         messages: [{ role: 'user', content: prompt }],
       }),
     });
