@@ -9,6 +9,7 @@ import { promptLot, appliquerLot, promptLotBilan, appliquerLotBilan, TAILLE_BILA
 
 const TAILLE_GROUPE = 8; // moins d'habitants par demande : chacun garde mieux sa propre voix
 const ECART_MIN_MS = 2500; // laisse respirer les limites gratuites
+const MAX_PARALLELE = 3; // plusieurs groupes à la fois, chacun vers un modèle différent (chaque modèle a ses propres limites)
 
 export const FOURNISSEURS = {
   groq: {
@@ -72,7 +73,7 @@ export class PenseurGroq {
     this.fournisseurActuel = 'groq';
     this.disponible = false;
     this.pret = false;
-    this.actifs = 0;
+    this.occupes = new Set(); // modèles qui réfléchissent en ce moment
     this.groupe = [];
     this.stats = { appels: 0, ok: 0, echecs: 0, renvois: 0, ms: 0 };
     this.parFournisseur = Object.fromEntries(ORDRE.map((f) => [f, 0]));
@@ -85,6 +86,8 @@ export class PenseurGroq {
     this.erreurTechnique = '';
     this.jetons = new Map(); // "f|m" → jetons estimés par envoi
   }
+
+  get actifs() { return this.occupes.size; }
 
   get cle() { return this.cles.groq || this.cles.gemini; }
   get fournisseur() {
@@ -157,10 +160,11 @@ export class PenseurGroq {
   // premier modèle, dans l'ordre de préférence, qui n'est pas en train de souffler.
   // Un modèle de secours ne sert que si aucun bon modèle ne reprend dans la minute.
   choisir(maintenant) {
-    const libre = (e) => maintenant >= (this.pauses.get(`${e.f}|${e.m}`) || 0);
+    const occupe = (e) => this.occupes.has(`${e.f}|${e.m}`);
+    const libre = (e) => !occupe(e) && maintenant >= (this.pauses.get(`${e.f}|${e.m}`) || 0);
     const bon = this.entrees.find((e) => e.principal && libre(e));
     if (bon) return bon;
-    const bientot = this.entrees.some((e) => e.principal && (this.pauses.get(`${e.f}|${e.m}`) || 0) - maintenant < 60000);
+    const bientot = this.entrees.some((e) => e.principal && (occupe(e) || (this.pauses.get(`${e.f}|${e.m}`) || 0) - maintenant < 60000));
     return bientot ? undefined : this.entrees.find(libre);
   }
 
@@ -172,7 +176,7 @@ export class PenseurGroq {
 
   tick() {
     const maintenant = performance.now();
-    if (!this.disponible || this.actifs || maintenant - this.dernierEnvoi < ECART_MIN_MS) return;
+    if (!this.disponible || this.actifs >= MAX_PARALLELE || maintenant - this.dernierEnvoi < ECART_MIN_MS) return;
     const e = this.choisir(maintenant);
     if (!e) return;
     const ids = this.sim.demandes().slice(0, TAILLE_GROUPE);
@@ -202,13 +206,13 @@ export class PenseurGroq {
     const bilan = type === 'bilan';
     const prompt = bilan ? promptLotBilan(sim, ids) : promptLot(sim, ids);
     for (const id of ids) sim.marquerEnvoye(id, type);
-    this.actifs = 1;
+    const k = `${e.f}|${e.m}`;
+    this.occupes.add(k);
     this.groupe = ids;
     this.dernierEnvoi = performance.now();
     this.stats.appels++;
     this.modele = e.m;
     this.fournisseurActuel = e.f;
-    const k = `${e.f}|${e.m}`;
     const t0 = performance.now();
     try {
       const r = await fetch('api/pensee', {
@@ -259,7 +263,7 @@ export class PenseurGroq {
         this.erreurTechnique = String(err.message || err).slice(0, 200);
       }
     } finally {
-      this.actifs = 0;
+      this.occupes.delete(k);
       this.groupe = [];
     }
   }

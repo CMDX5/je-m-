@@ -133,3 +133,33 @@ console.log('En ligne : clés Groq et Gemini vérifiées, modèles choisis, limi
   globalThis.fetch = avantFetch;
   console.log('Bilan du soir : chaque habitant écrit et relit ce qu\'il a compris. OK');
 }
+
+// Plusieurs modèles réfléchissent en même temps, chacun pour son groupe
+{
+  const sim3 = new Simulation({ seed: 11 }).init();
+  const p3 = new PenseurGroq(sim3);
+  await p3.enregistrerCle('gsk_bonne', 'groq');
+  await p3.enregistrerCle('AIza_bonne', 'gemini');
+  limites.clear(); erreurs.clear();
+  const avantFetch = globalThis.fetch;
+  const enCours = new Set(); let maxSimultanes = 0;
+  globalThis.fetch = async (url, opt = {}) => {
+    if (url !== 'api/pensee') return avantFetch(url, opt);
+    const m = JSON.parse(opt.body).modele;
+    assert.ok(!enCours.has(m), 'jamais deux groupes sur le même modèle');
+    enCours.add(m); maxSimultanes = Math.max(maxSimultanes, enCours.size);
+    await new Promise((r) => setTimeout(r, 30));
+    enCours.delete(m);
+    return avantFetch(url, opt);
+  };
+  for (let i = 0; i < 3; i++) { p3.dernierEnvoi = -1e9; p3.tick(); }
+  assert.equal(p3.actifs, 3, 'trois groupes partent ensemble');
+  p3.dernierEnvoi = -1e9; p3.tick();
+  assert.equal(p3.actifs, 3, 'pas plus de trois à la fois');
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(maxSimultanes, 3);
+  assert.equal(p3.actifs, 0);
+  assert.equal(p3.stats.ok, 24, 'trois groupes de 8 décisions');
+  globalThis.fetch = avantFetch;
+  console.log('Parallèle : trois modèles différents pensent en même temps. OK');
+}

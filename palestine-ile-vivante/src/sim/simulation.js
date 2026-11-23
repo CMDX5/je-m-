@@ -32,6 +32,18 @@ const ETAT = {
   se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend',
 };
 const TON = { chaleureux: 'd’un ton chaleureux', tendu: 'd’un ton tendu', colere: 'avec colère', triste: 'd’un ton triste', joyeux: 'd’un ton joyeux' };
+// Les mots de l'habitant pour un objet (« une ration », « du pain », « médicaments »…) → l'objet du monde.
+function nomObjet(mot) {
+  const t = sansAccent(String(mot ?? '')).toLowerCase().trim();
+  if (!t || t === 'rien') return null;
+  if (/^(nourriture|ration|repas|pain|poisson|olive|vivre|aliment|manger|legume|fruit|farine|ble)/.test(t) || /ration/.test(t)) return 'nourriture';
+  if (/^(remede|medic|soin|plante|potion)/.test(t)) return 'remedes';
+  if (/^(eau|cruche|jarre d.eau|boisson)/.test(t)) return 'eau';
+  if (/^(piece|argent|sou|monnaie|pieces)/.test(t)) return 'pieces';
+  if (/^(huile)/.test(t)) return 'huile';
+  return null;
+}
+
 // le ton choisi par l'habitant, rendu en français ; un ton inconnu est repris tel quel
 const commentDit = (ton) => (!ton || ton === 'calme' ? '' : ` ${TON[sansAccent(ton)] || `d’un ton ${ton}`}`);
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -426,7 +438,7 @@ export class Simulation {
     const duree = Number.isFinite(Number(d.duree_minutes)) ? Number(d.duree_minutes) : 0;
     const parole = clip(d.parole, 400);
     const ton = clip(d.ton, 24).toLowerCase();
-    const objet = ['nourriture', 'eau', 'pieces', 'remedes', 'huile'].includes(d.objet) ? d.objet : null;
+    const objet = nomObjet(d.objet) || (action === 'acheter' ? 'nourriture' : null);
     const qte = clamp(Number(d.quantite) || 1, 0, 200);
     const spec = { action, parole, ton, objet, qte, pret: !!d.pret };
     const cible = d.personne ? this.personne(d.personne) : null;

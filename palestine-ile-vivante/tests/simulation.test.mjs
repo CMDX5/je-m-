@@ -29,6 +29,16 @@ assert.ok(!/\/100/.test(prompt), 'des sensations, pas des chiffres');
 for (const consigne of ['Tu peux aider', 'de préférence', 'Que fais-tu', 'te presse', 'enfants et jeunes']) assert.ok(!prompt.includes(consigne) && !SYSTEME.includes(consigne), `aucune consigne de comportement : « ${consigne} »`);
 assert.ok(prompt.length < 2600, `perception compacte (${prompt.length} caractères)`);
 
+// Acheter avec ses propres mots (« des rations », « du pain ») : le marchand comprend
+for (const [mot, attendu] of [['rations', 'nourriture'], ['du pain', 'nourriture'], ['une ration', 'nourriture'], [undefined, 'nourriture'], ['médicaments', 'remedes']]) {
+  const ach = sim.habitants.find((v) => v.statut === 'attend' && v.age > 16);
+  if (!ach) break;
+  sim.marquerEnvoye(ach.id);
+  sim.appliquer(ach.id, { pensee: 'Je vais acheter.', humeur: 60, action: 'acheter', objet: mot, quantite: 1, parole: '' });
+  assert.ok(!ach.evenements.some((e) => /pas possible/.test(e.texte)), `achat compris : « ${mot} »`);
+  assert.equal(ach.activite?.objet ?? ach.activite?.spec?.objet ?? attendu, attendu);
+}
+
 // --- Cinq jours avec des décisions tirées au hasard (fixture) ---
 const rng = new RNG(7);
 let surTerre = 0, controles = 0;
