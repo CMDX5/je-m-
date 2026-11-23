@@ -31,6 +31,10 @@ export class Interface {
     this.nbRequetesVues = 0;
 
     document.querySelectorAll('#onglets button').forEach((b) => b.addEventListener('click', () => this.changerOnglet(b.dataset.onglet)));
+    document.querySelectorAll('#nav-mobile button').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.ongletM) { this.changerOnglet(b.dataset.ongletM); this.vue('panneau'); }
+      else this.vue(b.dataset.vue);
+    }));
     document.querySelectorAll('#vitesses button').forEach((b) => b.addEventListener('click', () => this.actions.vitesse(Number(b.dataset.v))));
     $('#contenu').addEventListener('click', (e) => this.clicContenu(e));
     $('#contenu').addEventListener('input', (e) => this.saisieContenu(e));
@@ -157,6 +161,8 @@ export class Interface {
   majBadges() {
     const n = this.sim.requetes.filter((r) => !r.repondue).length;
     $('#badge-requetes').textContent = n || '';
+    const m = $('#badge-requetes-m');
+    if (m) m.textContent = n || '';
   }
 
   changerOnglet(o) {
@@ -398,6 +404,18 @@ export class Interface {
     this.selection = id;
     this.rendreFiche(true);
     if (this.onglet === 'habitants') this.rendreContenu(true);
+    const nf = $('#nav-fiche');
+    if (nf) { nf.hidden = id == null; if (id != null) nf.textContent = this.sim.habitant(id).prenom; }
+    this.vue(id != null ? 'fiche' : 'ile');
+  }
+
+  // Sur téléphone, un seul panneau à la fois : l'île, la fiche d'un habitant ou un onglet.
+  vue(v) {
+    document.body.dataset.vue = v;
+    document.querySelectorAll('#nav-mobile button').forEach((b) => {
+      const actif = b.dataset.vue ? b.dataset.vue === v : v === 'panneau' && b.dataset.ongletM === this.onglet;
+      b.classList.toggle('actif', actif);
+    });
   }
 
   clicFiche(e) {

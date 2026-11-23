@@ -209,3 +209,33 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
 
 /* iPhone et Android zooment sur un champ dont le texte fait moins de 16px : on l'évite */
 @media (max-width: 900px) { input, select, textarea { font-size: 16px !important; } }
+
+/* ---------- Téléphone : une vue à la fois, barre de navigation en bas ---------- */
+#nav-mobile { display: none; }
+@media (max-width: 900px) {
+  #nav-mobile {
+    display: flex; gap: 2px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; overflow-x: auto;
+    background: var(--fond-2); border-top: 1px solid var(--bord); backdrop-filter: blur(6px);
+    padding: 4px max(4px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px));
+  }
+  #nav-mobile button { flex: 1 0 auto; border: 0; background: transparent; color: var(--doux); font-size: 13px; padding: 10px 8px; border-radius: 8px; white-space: nowrap; }
+  #nav-mobile button.actif { color: var(--texte); background: rgba(255,255,255,0.1); }
+  #nav-mobile button[hidden] { display: none; }
+  #onglets { display: none; }
+  #panneau, #fiche {
+    top: auto !important; left: 0; right: 0; width: auto; height: auto; max-height: 58vh;
+    bottom: calc(50px + env(safe-area-inset-bottom, 0px)); border-radius: 14px 14px 0 0; border-bottom: 0;
+  }
+  #panneau { height: 58vh; }
+  body:not([data-vue="panneau"]) #panneau { display: none; }
+  body:not([data-vue="fiche"]) #fiche { display: none; }
+  #barre { gap: 4px 8px; padding: 6px max(10px, env(safe-area-inset-right, 0px)) 6px max(10px, env(safe-area-inset-left, 0px)); }
+  #barre .titre strong, #jauges { display: none; }
+  #ressources { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; }
+  #ressources .res { flex: none; }
+  #vitesses button { padding: 6px 10px; }
+  #bandeau { top: auto; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 24px); }
+  body[data-vue="panneau"] #bandeau, body[data-vue="fiche"] #bandeau { bottom: calc(58vh + 58px + env(safe-area-inset-bottom, 0px)); }
+  #toasts { top: auto; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 24px); }
+  .toast { max-width: 100%; }
+}
