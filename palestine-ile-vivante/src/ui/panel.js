@@ -323,7 +323,7 @@ export class Interface {
   vueParoles() {
     const s = this.sim;
     const f = this.filtreParoles || 'flux';
-    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['mots', 'Pensées intimes'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
+    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
     let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
     if (f === 'flux' || f === 'fluxtout') {
     out += `<p class="note">${f === 'flux' ? 'Seulement ce qui est dit à voix haute.' : 'Tout ce qu\'ils disent et pensent, y compris les pensées de simple routine.'}</p>`;
@@ -341,7 +341,7 @@ export class Interface {
       return out;
     }
     out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans « Ce qui se dit ».</p>`;
-    const garder = { tout: () => true, mots: (e) => e.type === 'pensee' || e.type === 'parole', souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons' }[f] || (() => true);
+    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons' }[f] || (() => true);
     const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
     if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
     const nom = (id) => s.habitant(id)?.prenom || '?';
