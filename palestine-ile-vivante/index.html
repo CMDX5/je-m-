@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Palestine — Île Vivante</title>
+  <meta name="description" content="Simulation 3D d'un village insulaire méditerranéen de 50 habitants." />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.min.js" } }
+  </script>
+</head>
+<body data-vue="ile">
+  <canvas id="scene" aria-label="Vue 3D de l'île"></canvas>
+
+  <header id="barre">
+    <div class="titre">
+      <strong>Palestine — Île Vivante</strong>
+      <span id="horloge">Jour 1 · 6h00</span>
+      <span id="meteo" class="pastille"></span>
+    </div>
+    <div id="vitesses" role="group" aria-label="Vitesse du temps">
+      <button data-v="0" title="Pause (Espace)">❚❚</button>
+      <button data-v="1" title="×1 : une minute de jeu par seconde">×1</button>
+      <button data-v="4" title="×4">×4</button>
+      <button data-v="15" title="×15">×15</button>
+      <button data-v="60" title="×60">×60</button>
+    </div>
+    <div id="ressources"></div>
+    <div id="jauges"></div>
+  </header>
+
+  <aside id="panneau">
+    <nav id="onglets" role="tablist">
+      <button data-onglet="village" class="actif">Village</button>
+      <button data-onglet="habitants">Habitants</button>
+      <button data-onglet="requetes">Demandes <span class="badge" id="badge-requetes"></span></button>
+      <button data-onglet="paroles">Paroles</button>
+      <button data-onglet="journal">Journal</button>
+    </nav>
+    <div id="contenu"></div>
+  </aside>
+
+  <section id="fiche" hidden></section>
+  <nav id="nav-mobile" aria-label="Navigation">
+    <button data-vue="ile" class="actif" type="button">Île</button>
+    <button data-vue="fiche" id="nav-fiche" type="button" hidden>Habitant</button>
+    <button data-onglet-m="village" type="button">Village</button>
+    <button data-onglet-m="habitants" type="button">Habitants</button>
+    <button data-onglet-m="requetes" type="button">Demandes <span class="badge" id="badge-requetes-m"></span></button>
+    <button data-onglet-m="paroles" type="button">Paroles</button>
+    <button data-onglet-m="journal" type="button">Journal</button>
+  </nav>
+  <div id="etiquette" hidden></div>
+  <div id="infobulle" hidden></div>
+  <div id="bandeau" hidden></div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <div id="intro">
+    <div class="carte">
+      <h1>Palestine — Île Vivante</h1>
+      <p class="sous">Une île côtière de la Méditerranée. Cinquante habitants. Un conseil : vous.</p>
+      <p>Personne ici n'a été programmé pour penser. Chaque habitant a un corps (faim, soif, fatigue, santé), un foyer, de l'argent, une famille, des voisins, un métier. Le reste — ce qu'il pense, ce qu'il dit, ce qu'il décide, ce qu'il retient, qui il apprécie ou non — vient de lui : chacun pense avec un modèle de langage, en français.</p>
+      <p>En ligne, ils pensent seuls, en continu, avec un modèle gratuit de Groq : il suffit d'une clé gratuite, demandée au premier lancement. Sur claude.ai, ils pensent avec Claude quand vous touchez « Laisser réfléchir ». Sur un ordinateur, le jeu peut aussi utiliser <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>.</p>
+      <ul>
+        <li><b>Observer</b> : cliquez sur un habitant pour lire ses pensées et ses souvenirs, tels qu'il les écrit.</li>
+        <li><b>Parler</b> : adressez-vous à lui ; il décide quoi répondre, ou s'il vous répond.</li>
+        <li><b>Gouverner</b> : fixez salaires et prix, financez, sanctionnez, annoncez, ouvrez des chantiers, répondez à leurs demandes.</li>
+      </ul>
+      <p class="petit">Caméra : glisser pour tourner, clic droit pour se déplacer, molette pour zoomer · Double-clic sur un habitant pour le suivre · Espace : pause · Échap : désélectionner</p>
+      <button id="commencer" class="principal">Entrer sur l'île</button>
+      <p class="petit avertissement">Les habitants sont fictifs : leurs pensées sont produites par un modèle de langage, ils n'ont pas de conscience réelle.</p>
+    </div>
+  </div>
+
+  <div id="chargement">Chargement de l'île…</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
