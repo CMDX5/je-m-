@@ -6,12 +6,20 @@
 import { promptLot, appliquerLot } from './penseur-claude.js';
 
 const CLE = 'ile-vivante:groq';
-const TAILLE_GROUPE = 8;
+const TAILLE_GROUPE = 12;
 const ECART_MIN_MS = 2500; // laisse respirer la limite gratuite de Groq
 const PREFERENCES = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'];
 
 const lire = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const ecrire = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* stockage indisponible */ } };
+
+// « 7.66s », « 1m2.5s », « 250ms » → millisecondes
+function duree(t) {
+  if (!t) return 0;
+  let ms = 0;
+  for (const [, n, u] of String(t).matchAll(/([\d.]+)(ms|h|m|s)/g)) ms += Number(n) * { ms: 1, s: 1000, m: 60000, h: 3600000 }[u];
+  return ms;
+}
 
 function extraireJson(t) {
   const s = String(t || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
@@ -36,6 +44,8 @@ export class PenseurGroq {
     this.derniereErreur = '';
     this.pauseJusqua = 0;
     this.dernierEnvoi = -Infinity;
+    this.disponibles = [];
+    this.jetonsParEnvoi = 4000; // estimation, ajustée d'après Groq
   }
 
   async verifier() {
@@ -47,7 +57,8 @@ export class PenseurGroq {
       else if (!r.ok) this.derniereErreur = d.erreur || 'Groq injoignable pour le moment.';
       else {
         const dispo = d.modeles || [];
-        this.modele = PREFERENCES.find((m) => dispo.includes(m)) || dispo.find((m) => !/whisper|guard|tts|embed/i.test(m)) || '';
+        this.disponibles = [...PREFERENCES.filter((m) => dispo.includes(m)), ...dispo.filter((m) => !PREFERENCES.includes(m) && !/whisper|guard|tts|embed|orpheus|playai|compound/i.test(m))];
+        if (!this.disponibles.includes(this.modele)) this.modele = this.disponibles[0] || '';
         ecrire(`${CLE}:modele`, this.modele);
         this.disponible = !!this.modele;
         this.derniereErreur = this.modele ? '' : 'Aucun modèle de discussion disponible sur ce compte Groq.';
@@ -82,6 +93,14 @@ export class PenseurGroq {
 
   reflechir() { /* autonome : pas de bouton */ }
 
+  // N'envoie le groupe suivant que lorsque Groq a de quoi le traiter (évite les refus).
+  reglerRythme(q) {
+    if (!q) return;
+    const maintenant = performance.now();
+    if (Number.isFinite(q.jetons) && q.jetons < this.jetonsParEnvoi * 1.1) this.pauseJusqua = Math.max(this.pauseJusqua, maintenant + Math.min(65000, duree(q.jetonsReset) + 300));
+    if (Number.isFinite(q.requetes) && q.requetes < 1) this.pauseJusqua = Math.max(this.pauseJusqua, maintenant + Math.min(65000, duree(q.requetesReset) + 300));
+  }
+
   async lancer(ids) {
     const sim = this.sim;
     const prompt = promptLot(sim, ids);
@@ -97,10 +116,12 @@ export class PenseurGroq {
         body: JSON.stringify({ prompt, modele: this.modele }),
       });
       const d = await r.json().catch(() => ({}));
-      if (r.status === 429) throw Object.assign(new Error('limite'), { attente: d.attente || 20 });
+      if (r.status === 429) throw Object.assign(new Error('limite'), { attente: d.attente || 20, quota: d.quota });
       if (r.status === 401) { this.oublierCle(false); throw new Error('Groq refuse la clé enregistrée. Saisissez-en une nouvelle.'); }
       if (!r.ok) throw new Error(d.erreur || `erreur ${r.status}`);
       if (sim !== this.sim) return;
+      if (d.jetonsUtilises) this.jetonsParEnvoi = this.jetonsParEnvoi * 0.5 + d.jetonsUtilises * 0.5;
+      this.reglerRythme(d.quota);
       const n = appliquerLot(sim, ids, extraireJson(d.texte));
       this.stats.ok += n;
       this.stats.echecs += ids.length - n;
@@ -111,8 +132,17 @@ export class PenseurGroq {
       for (const id of ids) sim.echec(id);
       this.stats.echecs += ids.length;
       if (e.attente) {
-        this.pauseJusqua = performance.now() + e.attente * 1000;
-        this.derniereErreur = `Limite gratuite de Groq atteinte : les habitants reprennent dans ${Math.ceil(e.attente)} s.`;
+        // longue attente = quota du jour épuisé pour ce modèle : on passe au suivant
+        const suivant = this.disponibles[this.disponibles.indexOf(this.modele) + 1];
+        if (e.attente > 90 && suivant) {
+          this.modele = suivant;
+          ecrire(`${CLE}:modele`, suivant);
+          this.pauseJusqua = performance.now() + 2000;
+          this.derniereErreur = '';
+        } else {
+          this.pauseJusqua = performance.now() + e.attente * 1000;
+          this.derniereErreur = e.attente > 15 ? `Limite gratuite de Groq atteinte : les habitants reprennent dans ${Math.ceil(e.attente)} s.` : '';
+        }
       } else {
         this.pauseJusqua = performance.now() + 5000;
         this.derniereErreur = e instanceof SyntaxError ? 'Réponse de Groq illisible, nouvel essai dans un instant.' : e.message;

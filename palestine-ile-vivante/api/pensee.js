@@ -16,14 +16,21 @@ export default async function handler(req, res) {
         messages: [{ role: 'user', content: prompt }],
       }),
     });
+    // quotas restants annoncés par Groq : le jeu s'en sert pour régler son rythme
+    const quota = {
+      jetons: Number(r.headers.get('x-ratelimit-remaining-tokens')),
+      jetonsReset: r.headers.get('x-ratelimit-reset-tokens') || '',
+      requetes: Number(r.headers.get('x-ratelimit-remaining-requests')),
+      requetesReset: r.headers.get('x-ratelimit-reset-requests') || '',
+    };
     if (r.status === 429) {
       const attente = Number(r.headers.get('retry-after')) || 20;
-      return res.status(429).json({ erreur: 'limite Groq atteinte', attente });
+      return res.status(429).json({ erreur: 'limite Groq atteinte', attente, quota });
     }
     if (r.status === 401 || r.status === 403) return res.status(401).json({ erreur: 'clé refusée par Groq' });
     if (!r.ok) return res.status(502).json({ erreur: `Groq a répondu ${r.status} : ${(await r.text()).slice(0, 200)}` });
     const j = await r.json();
-    return res.status(200).json({ texte: j.choices?.[0]?.message?.content ?? '' });
+    return res.status(200).json({ texte: j.choices?.[0]?.message?.content ?? '', quota, jetonsUtilises: j.usage?.total_tokens ?? null });
   } catch {
     return res.status(502).json({ erreur: 'Groq injoignable' });
   }

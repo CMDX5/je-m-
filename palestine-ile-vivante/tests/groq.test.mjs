@@ -16,7 +16,7 @@ globalThis.fetch = async (url, opt = {}) => {
     const corps = JSON.parse(opt.body);
     const ids = [...corps.prompt.matchAll(/=== Habitant id=(\d+) ===/g)].map((m) => Number(m[1]));
     assert.equal(corps.modele, 'llama-3.3-70b-versatile');
-    return rep(200, { texte: JSON.stringify({ habitants: ids.map((id) => ({ id, pensee: 'Je vais au marché.', humeur: 70, action: 'aller', lieu: 'marche', parole: '' })) }) });
+    return rep(200, { quota: { jetons: mode === 'serre' ? 100 : 50000, jetonsReset: '7.5s', requetes: 20, requetesReset: '2s' }, jetonsUtilises: 3000, texte: JSON.stringify({ habitants: ids.map((id) => ({ id, pensee: 'Je vais au marché.', humeur: 70, action: 'aller', lieu: 'marche', parole: '' })) }) });
   }
   throw new Error('url inattendue ' + url);
 };
@@ -31,15 +31,24 @@ assert.equal(p.modele, 'llama-3.3-70b-versatile', 'le meilleur modèle disponibl
 p.tick();
 assert.equal(p.actifs, 1, 'un groupe part réfléchir tout seul');
 await new Promise((r) => setTimeout(r, 20));
-assert.equal(p.stats.ok, 8, '8 habitants ont reçu leur décision');
-assert.equal(sim.habitants.filter((v) => v.pensee === 'Je vais au marché.').length, 8);
+assert.equal(p.stats.ok, 12, '12 habitants ont reçu leur décision');
+assert.equal(sim.habitants.filter((v) => v.pensee === 'Je vais au marché.').length, 12);
 p.tick();
 assert.equal(p.actifs, 0, 'écart minimal entre deux appels respecté');
 p.dernierEnvoi = -1e9; mode = 'limite';
 p.tick();
 await new Promise((r) => setTimeout(r, 20));
-assert.ok(/reprennent dans 7 s/.test(p.derniereErreur), 'limite gratuite : pause annoncée');
+assert.ok(p.pauseJusqua - performance.now() > 6000, 'limite gratuite : courte pause, sans alarmer le joueur');
 p.dernierEnvoi = -1e9;
 p.tick();
 assert.equal(p.actifs, 0, 'pas de nouvel appel pendant la pause');
+mode = 'serre'; p.pauseJusqua = 0; p.dernierEnvoi = -1e9;
+p.tick();
+await new Promise((r) => setTimeout(r, 20));
+assert.ok(p.pauseJusqua - performance.now() > 6000, 'quota de jetons presque vide : le jeu attend la remise à zéro annoncée par Groq');
+mode = 'limite'; p.pauseJusqua = 0; p.dernierEnvoi = -1e9;
+globalThis.fetch = ((f) => async (u, o) => (u === 'api/pensee' ? { ok: false, status: 429, json: async () => ({ attente: 600 }) } : f(u, o)))(globalThis.fetch);
+p.tick();
+await new Promise((r) => setTimeout(r, 20));
+assert.equal(p.modele, 'llama-3.1-8b-instant', 'quota du jour épuisé : passage au modèle suivant');
 console.log('Groq : clé vérifiée, modèle choisi, décisions appliquées, limite respectée. OK');
