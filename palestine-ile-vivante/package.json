@@ -1,0 +1,11 @@
+{
+  "name": "palestine-ile-vivante",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Simulation 3D de village insulaire méditerranéen (Three.js)",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test": "node tests/simulation.test.mjs"
+  }
+}
