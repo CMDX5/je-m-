@@ -115,7 +115,7 @@ function jeter(sp) {
   sp.material.dispose();
 }
 
-const DUREE_PAROLE = 6, DUREE_PENSEE = 5, MAX_BULLES = 12;
+const DUREE_PAROLE = 8, DUREE_PENSEE = 9, MAX_BULLES = 14;
 const ACTIVITE_BATIMENT = { mosquee: 'Mosquée', ecole: 'École', dispensaire: 'Dispensaire', atelier: 'Atelier', entrepot: 'Entrepôt' };
 
 export class Habitants3D {

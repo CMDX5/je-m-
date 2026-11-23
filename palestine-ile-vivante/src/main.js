@@ -90,7 +90,14 @@ const habitants3d = new Habitants3D(scene, sim);
   try { voir = localStorage.getItem('ile-vivante:pensees') !== 'non'; } catch { /* stockage indisponible */ }
   const appliquer = () => { habitants3d.voirPensees = voir; b?.classList.toggle('actif', voir); if (b) b.title = voir ? 'Pensées visibles au-dessus des têtes (toucher pour masquer)' : 'Pensées masquées (toucher pour les voir)'; };
   appliquer();
-  b?.addEventListener('click', () => { voir = !voir; try { localStorage.setItem('ile-vivante:pensees', voir ? 'oui' : 'non'); } catch { /* */ } appliquer(); });
+  b?.addEventListener('click', () => {
+    voir = !voir;
+    try { localStorage.setItem('ile-vivante:pensees', voir ? 'oui' : 'non'); } catch { /* */ }
+    appliquer();
+    // un retour clair : les bulles ne se voient que pour ceux qui sont dehors
+    const dehors = sim.habitants.filter((v) => !v.interieur).length;
+    ui.toast(voir ? `Pensées affichées au-dessus des têtes.${dehors ? '' : ' Tout le monde est à l’intérieur pour l’instant : rien à voir tout de suite.'}` : 'Pensées masquées : seules les paroles s’affichent.', 'conseil');
+  });
 }
 
 sim.on('construction', ({ cle, batiment }) => {
@@ -171,7 +178,7 @@ penseur.verifier();
 // En ligne (Vercel) : rapport régulier pour que Claude surveille la partie
 if (surGroq) demarrerRapports(sim, penseur);
 
-window.__ile = { sim, ui, camera, controls, penseur, select: (id) => ui.actions.selectionner(id, true) };
+window.__ile = { sim, ui, camera, controls, penseur, select: (id) => ui.actions.selectionner(id, true) , habitants3d };
 
 const raycaster = new THREE.Raycaster();
 const souris = new THREE.Vector2();
