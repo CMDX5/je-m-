@@ -336,20 +336,47 @@ export class Interface {
     return out;
   }
 
+  // Journal : d'abord la vie intérieure (tout ce que les habitants écrivent eux-mêmes), puis la chronique des événements.
   vueJournal() {
     const s = this.sim;
-    let out = `<h3>Chronique du village</h3>`;
-    for (const e of [...s.journal].reverse().slice(0, 150)) {
-      out += `<div class="journal-e ${e.type}" ${e.sujets?.length ? `data-sujet="${e.sujets[0]}"` : ''}><time>${esc(s.horodatage(e.t))}</time>${esc(e.texte)}</div>`;
+    const f = this.filtreJournal || 'tout';
+    const filtres = [['tout', 'Vie intérieure'], ['mots', 'Pensées et paroles'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['evenements', 'Événements']];
+    let out = `<h3>Journal</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-journal="${k}" type="button">${n}</button>`).join('')}</div>`;
+    if (f === 'evenements') {
+      for (const e of [...s.journal].reverse().slice(0, 150)) out += `<div class="journal-e ${e.type}" ${e.sujets?.length ? `data-sujet="${e.sujets[0]}"` : ''}><time>${esc(s.horodatage(e.t))}</time>${esc(e.texte)}</div>`;
+      return out;
+    }
+    out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans l'onglet Paroles.</p>`;
+    const garder = { tout: () => true, mots: (e) => e.type === 'pensee' || e.type === 'parole', souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons' }[f] || (() => true);
+    const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
+    if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
+    const nom = (id) => s.habitant(id)?.prenom || '?';
+    for (const e of liste) {
+      const qui = `<b class="lien">${esc(nom(e.id))}</b>`;
+      const sur = e.sur != null ? esc(nom(e.sur)) : '';
+      const avant = e.avant ? `<small class="note">Avant : « ${esc(e.avant)} »</small>` : '';
+      const ton = e.ton && e.ton !== 'calme' ? ` <small class="note">(${esc(TONS[e.ton] || e.ton)})</small>` : '';
+      const phrase = {
+        pensee: `${qui} pense : « ${esc(e.texte)} »`,
+        parole: `${qui} dit${sur ? ` à ${sur}` : ''} : « ${esc(e.texte)} »${ton}`,
+        souvenir: `${qui} retient : « ${esc(e.texte)} »`,
+        avis: `${qui}, à propos de ${sur} : « ${esc(e.texte)} »${avant}`,
+        identite: `${qui} se décrit : « ${esc(e.texte)} »${avant}`,
+        lecons: `${qui} a compris : « ${esc(e.texte)} »${avant}`,
+        bilan: `${qui}, avant de dormir : « ${esc(e.texte)} »`,
+        requete: `${qui} écrit au conseil : « ${esc(e.texte)} »`,
+      }[e.type] || `${qui} : « ${esc(e.texte)} »`;
+      out += `<div class="journal-e interieur-${e.type}" data-sujet="${e.id}"><time>${esc(s.horodatage(e.t))}</time>${phrase}</div>`;
     }
     return out;
   }
 
   // ---------- Événements ----------
   clicContenu(e) {
-    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer]');
+    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer],[data-journal]');
     if (!t) return;
     const s = this.sim;
+    if (t.dataset.journal) { this.filtreJournal = t.dataset.journal; return this.rendreContenu(true); }
     if (t.dataset.hab !== undefined) return this.actions.selectionner(Number(t.dataset.hab), true);
     if (t.dataset.sujet !== undefined) return this.actions.selectionner(Number(t.dataset.sujet), true);
     if (t.dataset.ignorer) s.ignorerRequete(Number(t.dataset.ignorer));

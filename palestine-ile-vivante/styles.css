@@ -239,3 +239,12 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
   #toasts { top: auto; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 24px); }
   .toast { max-width: 100%; }
 }
+
+/* Journal : vie intérieure */
+.filtres-journal { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.filtres-journal .btn.actif { background: var(--or, #e6b450); color: #1c1a16; border-color: transparent; }
+.journal-e small.note { display: block; margin-top: 2px; }
+.journal-e .lien { cursor: pointer; }
+.interieur-identite, .interieur-lecons { border-left: 3px solid var(--or, #e6b450); padding-left: 8px; }
+.interieur-avis { border-left: 3px solid #7ac0b0; padding-left: 8px; }
+.interieur-requete { border-left: 3px solid #d0705a; padding-left: 8px; }

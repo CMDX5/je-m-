@@ -44,6 +44,19 @@ function nomObjet(mot) {
   return null;
 }
 
+// Tri d'AFFICHAGE pour le journal (ne change rien à ce que vit ou pense l'habitant) :
+// on y met les pensées et paroles qui parlent des autres, de soi, de ce qu'on ressent ou qu'on se demande,
+// et on laisse dans l'onglet Paroles les phrases de simple routine (« j'ai soif, je vais boire »).
+const MOTS_INTIMES = /(je (me )?(sens|demande|crois|pense que|regrette|crains|souviens|voudrais|reve|doute|comprends|sais pas|ne sais)|j'(aime|ai peur|espere|ai honte|en ai assez|ai l'impression|aurais)|pourquoi|peur|honte|fier|fiere|triste|heureu|colere|seul|seule|injust|confiance|merite|mensonge|menti|pardon|manque|souvenir|vie|avenir|famille|enfants?|mere|pere|mari|femme|ami|aime|coeur|dieu|priere|conseil|reve|espoir|inquiet|inquiete|jaloux|jalouse|rancune|merci)/;
+function penseePersonnelle(texte, habitants, v, ton = '') {
+  const t = sansAccent(String(texte || '')).replace(/’/g, "'");
+  if (t.length < 25) return false;
+  if (ton && !['calme', 'neutre', ''].includes(sansAccent(ton))) return true;
+  if (t.includes('?') || t.length > 160) return true;
+  if (habitants.some((o) => o !== v && t.includes(sansAccent(o.prenom).toLowerCase()))) return true;
+  return MOTS_INTIMES.test(t);
+}
+
 // le ton choisi par l'habitant, rendu en français ; un ton inconnu est repris tel quel
 const commentDit = (ton) => (!ton || ton === 'calme' ? '' : ` ${TON[sansAccent(ton)] || `d’un ton ${ton}`}`);
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -56,6 +69,7 @@ export class Simulation {
     this.listeners = {};
     this.journal = [];
     this.flux = []; // paroles et pensées, pour l'interface
+    this.interieur = []; // vie intérieure : ce que chacun retient, pense des autres, dit de lui-même, comprend
     this.requetes = [];
     this.nextRequete = 1;
     this.res = { nourriture: 150, huile: 20, pierre: 55, bois: 40, pieces: 800, remedes: 18 };
@@ -387,13 +401,23 @@ export class Simulation {
     v.urgence = '';
     v.pensee = clip(d.pensee, 400);
     if (Number.isFinite(Number(d.humeur))) v.humeur = clamp(Math.round(Number(d.humeur)), 0, 100);
-    if (v.pensee) this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
-    retenir(v, this.temps, d.souvenir);
+    if (v.pensee) {
+      this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
+      if (penseePersonnelle(v.pensee, this.habitants, v)) this.vivre(v, 'pensee', v.pensee);
+    }
+    const souvenir = clip(d.souvenir, 300);
+    retenir(v, this.temps, souvenir);
+    if (souvenir) this.vivre(v, 'souvenir', souvenir);
     const cibleAvis = d.avis_sur ? this.personne(d.avis_sur) : null;
-    if (cibleAvis && cibleAvis !== v && d.avis) v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 200) };
-    if (d.identite && String(d.identite).trim()) v.identite = clip(d.identite, 260);
+    if (cibleAvis && cibleAvis !== v && d.avis) {
+      const avant = v.avis[cibleAvis.id]?.texte;
+      v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 200) };
+      if (v.avis[cibleAvis.id].texte !== avant) this.vivre(v, 'avis', v.avis[cibleAvis.id].texte, { sur: cibleAvis.id, avant });
+    }
+    if (d.identite && String(d.identite).trim()) this.changerIdentite(v, clip(d.identite, 260));
     if (d.requete_conseil && String(d.requete_conseil).trim()) {
       this.requetes.push({ id: this.nextRequete++, de: v.id, texte: clip(d.requete_conseil, 400), t: this.temps, repondue: false });
+      this.vivre(v, 'requete', this.requetes.at(-1).texte);
       v.stats.requetes++;
       this.stats.requetes++;
       this.emit('requete', this.requetes.at(-1));
@@ -414,12 +438,30 @@ export class Simulation {
   appliquerBilan(id, d) {
     const v = this.habitant(id);
     if (!v || !d) return;
-    if (d.resume) v.resume = clip(d.resume, 700);
-    if (d.identite) v.identite = clip(d.identite, 260);
-    if (typeof d.lecons === 'string') v.lecons = clip(d.lecons, 700);
+    if (d.resume) { v.resume = clip(d.resume, 700); this.vivre(v, 'bilan', v.resume); }
+    if (d.identite) this.changerIdentite(v, clip(d.identite, 260));
+    if (typeof d.lecons === 'string' && clip(d.lecons, 700) !== v.lecons) {
+      const avant = v.lecons;
+      v.lecons = clip(d.lecons, 700);
+      if (v.lecons) this.vivre(v, 'lecons', v.lecons, { avant });
+    }
     v.souvenirs = v.souvenirs.slice(-6);
     v.derniereBilan = this.temps;
     v.bilanDu = false;
+  }
+
+  // Journal de la vie intérieure : seulement ce que l'habitant a lui-même écrit.
+  vivre(v, type, texte, extra = {}) {
+    if (!texte) return;
+    this.interieur.push({ t: this.temps, id: v.id, type, texte, ...extra });
+    if (this.interieur.length > 1500) this.interieur.splice(0, this.interieur.length - 1500);
+  }
+
+  changerIdentite(v, texte) {
+    if (!texte || texte === v.identite) return;
+    const avant = v.identite;
+    v.identite = texte;
+    this.vivre(v, 'identite', texte, { avant });
   }
 
   personne(txt) {
@@ -719,6 +761,7 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: null, ton, lieu: v.activite?.nomLieu });
+    if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { ton });
     for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${commentDit(ton)} : « ${texte} »`);
   }
 
@@ -740,6 +783,7 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: cible.id, ton, lieu: v.activite?.nomLieu });
+    if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { sur: cible.id, ton });
     // la cible entend et doit pouvoir répondre
     const dormait = cible.activite?.action === 'dormir' && cible.statut === 'agit';
     noter(cible, this.temps, `${dormait ? 'Tu es réveillé. ' : ''}${v.prenom} te dit${commentDit(ton)} : « ${texte} »`);
@@ -1107,7 +1151,7 @@ export class Simulation {
       journal: this.journal.slice(-200), flux: this.flux.slice(-120), requetes: this.requetes, nextRequete: this.nextRequete,
       res: this.res, prix: this.prix, prixRemede: this.prixRemede, salaire: this.salaire, dettes: this.dettes, monde: this.monde,
       foyers: this.foyers, bonus: this.bonus, projet: this.projet, meteo: this.meteo, navire: this.navire,
-      historique: this.historique, stats: this.stats, habitants: this.habitants,
+      historique: this.historique, stats: this.stats, habitants: this.habitants, interieur: this.interieur,
       batimentsAjoutes: this.batiments.filter((b) => b.ajoute), noms: this.batiments.map((b) => [b.id, b.nom, b.famille]),
     }, (k, x) => (typeof x === 'number' && !Number.isInteger(x) ? Math.round(x * 1000) / 1000 : x));
   }
@@ -1121,7 +1165,7 @@ export class Simulation {
     sim.batimentsParId = Object.fromEntries(sim.batiments.map((b) => [b.id, b]));
     for (const [id, nom, famille] of d.noms || []) if (sim.batimentsParId[id]) Object.assign(sim.batimentsParId[id], { nom, famille });
     sim.nav = new NavGrid(sim.batiments);
-    for (const k of ['temps', 'journal', 'flux', 'requetes', 'nextRequete', 'res', 'prix', 'prixRemede', 'salaire', 'dettes', 'monde', 'foyers', 'bonus', 'projet', 'meteo', 'navire', 'historique', 'stats', 'habitants']) {
+    for (const k of ['temps', 'journal', 'flux', 'requetes', 'nextRequete', 'res', 'prix', 'prixRemede', 'salaire', 'dettes', 'monde', 'foyers', 'bonus', 'projet', 'meteo', 'navire', 'historique', 'stats', 'habitants', 'interieur']) {
       if (d[k] !== undefined) sim[k] = d[k];
     }
     sim.rng.state = d.rng;

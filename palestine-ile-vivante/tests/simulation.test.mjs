@@ -39,6 +39,26 @@ for (const [mot, attendu] of [['rations', 'nourriture'], ['du pain', 'nourriture
   assert.equal(ach.activite?.objet ?? ach.activite?.spec?.objet ?? attendu, attendu);
 }
 
+// Vie intérieure : le journal ne garde que ce que l'habitant écrit lui-même
+{
+  const v = sim.habitants.find((x) => x.statut === 'attend' && x.age > 16);
+  const autre = sim.habitants.find((x) => x !== v);
+  const n0 = sim.interieur.length;
+  sim.marquerEnvoye(v.id);
+  sim.appliquer(v.id, { pensee: `Je me demande si ${autre.prenom} m'en veut encore.`, humeur: 40, action: 'rien', parole: '', souvenir: 'Le premier matin sur la plage.', avis_sur: autre.prenom, avis: 'Il ne dit jamais ce qu\'il pense.', identite: 'Quelqu\'un qui doute.' });
+  const types = sim.interieur.slice(n0).map((e) => e.type);
+  assert.deepEqual(types, ['pensee', 'souvenir', 'avis', 'identite'], 'pensée personnelle, souvenir, avis et identité notés');
+  const n1 = sim.interieur.length;
+  const w = sim.habitants.find((x) => x.statut === 'attend' && x.age > 16);
+  sim.marquerEnvoye(w.id);
+  sim.appliquer(w.id, { pensee: "J'ai soif, je vais boire.", humeur: 60, action: 'rien', parole: '' });
+  assert.equal(sim.interieur.length, n1, 'une pensée de simple routine reste dans l\'onglet Paroles');
+  sim.appliquerBilan(v.id, { resume: 'Une journée.', identite: 'Quelqu\'un qui doute encore.', lecons: 'Ici, il faut demander.' });
+  const fin = sim.interieur.slice(n1).map((e) => e.type);
+  assert.deepEqual(fin, ['bilan', 'identite', 'lecons']);
+  assert.equal(sim.interieur.at(-2).avant, 'Quelqu\'un qui doute.', 'on voit comment il se décrivait avant');
+}
+
 // --- Cinq jours avec des décisions tirées au hasard (fixture) ---
 const rng = new RNG(7);
 let surTerre = 0, controles = 0;
@@ -94,6 +114,7 @@ const sim2 = Simulation.charger(json);
 sim2.update(60);
 assert.equal(sim2.habitants.length, 50);
 assert.ok(sim2.habitants.every((v) => v.statut !== 'reflechit'), 'les pensées en cours sont relancées au chargement');
+assert.ok(sim2.interieur.length > 0 && sim2.interieur.length === sim.interieur.length, 'la vie intérieure est sauvegardée');
 
 console.log(`Monde : 5 jours, ${sim.stats.decisions} décisions (fixture aléatoire), ${sim.stats.paroles} paroles, ${sim.stats.dons} dons, ${sim.stats.prises} prises, ${sim.stats.disputes} disputes, ${sim.stats.achats} achats.`);
 console.log(`Caisse du conseil : ${Math.round(sim.res.pieces)} pièces · marché : ${Math.round(sim.res.nourriture)} rations · foyers : ${Math.round(sim.nourritureFoyers())} rations`);

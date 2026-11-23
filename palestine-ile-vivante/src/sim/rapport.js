@@ -27,6 +27,7 @@ export function resumer(sim, penseur, erreursPage) {
     journal: sim.journal.slice(-10).map((e) => `${sim.horodatage(e.t)} ${e.texte}`),
     // 4 habitants différents à chaque rapport, pour voir tout le village au fil du temps
     echantillon: H.filter((v) => v.nbDecisions > 0).sort(() => Math.random() - 0.5).slice(0, 4).map((v) => ({ nom: v.prenom, age: v.age, metier: v.metier, faim: Math.round(v.besoins.faim), soif: Math.round(v.besoins.soif), pieces: Math.round(v.poche.pieces), pensee: v.pensee, identite: v.identite, lecons: v.lecons || '', souvenirs: v.souvenirs.slice(-3).map((s) => s.texte), avis: Object.values(v.avis).slice(-2).map((a) => a.texte) })),
+    interieur: (sim.interieur || []).slice(-14).map((e) => ({ t: sim.horodatage(e.t), de: sim.habitant(e.id)?.prenom, type: e.type, sur: e.sur != null ? sim.habitant(e.sur)?.prenom : undefined, texte: e.texte })),
     bilans: { faits: H.filter((v) => v.resume).length, avecLecons: H.filter((v) => v.lecons).length, enAttente: H.filter((v) => v.bilanDu).length },
     erreursPage: erreursPage.slice(-5),
   };
