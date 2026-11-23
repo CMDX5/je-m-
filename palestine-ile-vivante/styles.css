@@ -203,3 +203,6 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
 #bandeau small { flex-basis: 100%; color: var(--doux); }
 #bandeau .btn { font-size: 14px; padding: 8px 14px; }
 @media (max-width: 900px) { #bandeau { top: auto; bottom: calc(42% + 18px); } }
+#bandeau form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; text-align: left; }
+#bandeau form b, #bandeau form small { flex-basis: 100%; }
+#bandeau input { flex: 1; min-width: 0; font: inherit; color: var(--texte); background: rgba(0,0,0,0.3); border: 1px solid var(--bord); border-radius: 7px; padding: 8px; }

@@ -17,7 +17,7 @@ Voici les règles de ce monde, identiques pour chacun :
 
 const FORMAT = `
 
-FORMAT DE TA RÉPONSE : uniquement un tableau JSON, un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Pensée et parole courtes (une ou deux phrases). Exemple de forme : [{"id": 3, "pensee": "...", "humeur": 60, "action": "travailler", "parole": ""}]`;
+FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Pensée et parole courtes (une ou deux phrases). Exemple de forme : {"habitants": [{"id": 3, "pensee": "...", "humeur": 60, "action": "travailler", "parole": ""}]}`;
 
 const MESSAGES = {
   not_granted: "Vous n'avez pas autorisé cette page à utiliser Claude. Rechargez la page pour qu'elle vous le redemande.",
@@ -32,6 +32,28 @@ const MESSAGES = {
   prompt_too_large: 'Trop d’informations à la fois : touchez à nouveau.',
 };
 const DEFINITIFS = new Set(['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed']);
+
+// Un seul texte pour un groupe d'habitants : chacun avec SA perception.
+export function promptLot(sim, ids) {
+  const blocs = ids.map((id) => `=== Habitant id=${id} ===\n${construirePrompt(sim, sim.habitant(id), 'decision', { commun: false })}`);
+  return `${CONSIGNE}${SYSTEME}${FORMAT}\n\n${infosVillage(sim)}\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par l'objet JSON ({"habitants": [...]}, ${ids.length} habitants).`;
+}
+
+// Rend à chaque habitant SA décision ; ceux sans réponse restent un moment sans rien faire.
+export function appliquerLot(sim, ids, rep) {
+  const liste = Array.isArray(rep) ? rep : Array.isArray(rep?.habitants) ? rep.habitants : [];
+  const parId = new Map();
+  liste.forEach((d, i) => {
+    if (!d || typeof d !== 'object') return;
+    const id = Number.isInteger(Number(d.id)) && ids.includes(Number(d.id)) ? Number(d.id) : ids[i];
+    if (id !== undefined && !parId.has(id)) parId.set(id, d);
+  });
+  for (const id of ids) {
+    if (parId.has(id)) sim.appliquer(id, parId.get(id));
+    else sim.echec(id);
+  }
+  return parId.size;
+}
 
 export class PenseurClaude {
   constructor(sim) {
@@ -72,8 +94,7 @@ export class PenseurClaude {
     const sim = this.sim;
     const ids = sim.demandes().slice(0, TAILLE_GROUPE);
     if (!ids.length) return;
-    const blocs = ids.map((id) => `=== Habitant id=${id} ===\n${construirePrompt(sim, sim.habitant(id), 'decision', { commun: false })}`);
-    const prompt = `${CONSIGNE}${SYSTEME}${FORMAT}\n\n${infosVillage(sim)}\n\n${blocs.join('\n\n')}\n\nRéponds maintenant par le tableau JSON (${ids.length} objets).`;
+    const prompt = promptLot(sim, ids);
     for (const id of ids) sim.marquerEnvoye(id);
     this.groupe = ids;
     this.actifs = 1;
@@ -82,20 +103,10 @@ export class PenseurClaude {
     const t0 = performance.now();
     try {
       const rep = await this.sample.json(prompt, { modelTier: 'quick', cache: false });
-      const liste = Array.isArray(rep) ? rep : Array.isArray(rep?.habitants) ? rep.habitants : [];
-      const parId = new Map();
-      liste.forEach((d, i) => {
-        if (!d || typeof d !== 'object') return;
-        const id = Number.isInteger(Number(d.id)) && ids.includes(Number(d.id)) ? Number(d.id) : ids[i];
-        if (id !== undefined && !parId.has(id)) parId.set(id, d);
-      });
-      for (const id of ids) {
-        if (sim !== this.sim) return;
-        if (parId.has(id)) sim.appliquer(id, parId.get(id));
-        else sim.echec(id);
-      }
-      this.stats.ok += parId.size;
-      this.stats.echecs += ids.length - parId.size;
+      if (sim !== this.sim) return;
+      const n = appliquerLot(sim, ids, rep);
+      this.stats.ok += n;
+      this.stats.echecs += ids.length - n;
       const ms = performance.now() - t0;
       this.stats.ms = this.stats.ms ? this.stats.ms * 0.7 + ms * 0.3 : ms;
     } catch (e) {

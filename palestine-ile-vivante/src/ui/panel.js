@@ -117,6 +117,17 @@ export class Interface {
         cls = enPause ? 'attente' : '';
         html = `<span>${enPause ? 'Le temps attend : ' : ''}${n} habitant${n > 1 ? 's' : ''} doi${n > 1 ? 'vent' : 't'} décider.</span><button class="btn principal" data-reflechir type="button">Laisser réfléchir</button>${p.derniereErreur ? `<small>${esc(p.derniereErreur)}</small>` : ''}`;
       } else if (p.derniereErreur) html = esc(p.derniereErreur);
+    } else if (p?.mode === 'groq') {
+      if (!p.pret) html = 'Connexion à Groq…';
+      else if (!p.disponible && !p.cle) {
+        cls = 'alerte';
+        html = `<form data-cle-groq><b>Pour que les habitants pensent seuls, il faut une clé Groq gratuite.</b>
+          <small>1. Ouvrez <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> et connectez-vous (un compte Google suffit).<br>2. Touchez « Create API Key », puis copiez la clé.<br>3. Collez-la ici. Elle reste sur votre téléphone.</small>
+          <input id="cle-groq" type="password" autocomplete="off" placeholder="gsk_…" aria-label="Clé Groq"><button class="btn principal" type="submit">Enregistrer</button>
+          ${p.derniereErreur ? `<small class="neg">${esc(p.derniereErreur)}</small>` : ''}</form>`;
+      } else if (!p.disponible) { cls = 'alerte'; html = `${esc(p.derniereErreur || 'Groq indisponible.')} <button class="btn" data-oublier-cle type="button">Changer de clé</button>`; }
+      else if (p.derniereErreur) html = esc(p.derniereErreur);
+      else if (enPause) html = `⏳ Les habitants réfléchissent (${s.nbAttente()} en attente)…`;
     } else if (p && !p.disponible) {
       cls = 'alerte';
       html = `<b>Les habitants ne peuvent pas penser.</b> ${esc(p.derniereErreur || 'Aucun modèle de langage connecté.')}<br><small>Gratuit : installez <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>, puis <code>ollama pull qwen2.5:3b</code>, et relancez <code>npm start</code>.</small>`;
@@ -124,10 +135,22 @@ export class Interface {
       html = `⏳ Le temps attend que ${s.nbAttente()} habitant(s) aient fini de réfléchir (${p?.stats.appels ? `${Math.round((p.stats.ms || 0) / 100) / 10} s par pensée` : '…'}).`;
     }
     b.hidden = !html;
-    if (b.dataset.cache !== cls + html) { b.dataset.cache = cls + html; b.className = cls; b.innerHTML = html; }
+    if (b.dataset.cache !== cls + html && !(b.contains(document.activeElement) && document.activeElement.tagName === 'INPUT')) { b.dataset.cache = cls + html; b.className = cls; b.innerHTML = html; }
     if (!b.dataset.ecoute) {
       b.dataset.ecoute = '1';
-      b.addEventListener('click', (e) => { if (e.target.closest('[data-reflechir]')) this.penseur?.reflechir?.(); });
+      b.addEventListener('click', (e) => {
+        if (e.target.closest('[data-reflechir]')) this.penseur?.reflechir?.();
+        if (e.target.closest('[data-oublier-cle]')) { this.penseur?.oublierCle?.(); b.dataset.cache = ''; }
+      });
+      b.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const v = b.querySelector('#cle-groq')?.value.trim();
+        if (!v) return;
+        b.dataset.cache = '';
+        const ok = await this.penseur?.enregistrerCle?.(v);
+        b.dataset.cache = '';
+        this.toast(ok ? `Clé acceptée. Les habitants pensent avec ${this.penseur.modele}.` : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
+      });
     }
   }
 
@@ -212,7 +235,9 @@ export class Interface {
         <button class="btn" data-commerce="acheterPierre" ${s.res.pieces < 20 ? 'disabled' : ''}>12 pierre ← 20 pièces</button>
         <button class="btn" data-commerce="acheterRemedes" ${s.res.pieces < 30 ? 'disabled' : ''}>8 remèdes ← 30 pièces</button></div>`;
     } else out += `<p class="note">Aucun navire à quai.</p>`;
-    if (p?.mode === 'claude') {
+    if (p?.mode === 'groq') {
+      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Groq, modèle ${esc(p.modele)} : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse, ${(p.stats.ms / 1000).toFixed(1)} s par groupe.` : 'Aucune clé Groq valide.'}</p>`;
+    } else if (p?.mode === 'claude') {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Claude, sur votre compte : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse. Chaque toucher sur « Laisser réfléchir » fait penser jusqu'à 16 habitants, chacun d'après sa propre perception.` : esc(p.derniereErreur)}</p>`;
     } else if (p) {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Fournisseur : <b>${esc(p.fournisseur)}</b> (${esc(p.modele)}) · ${p.stats.ok} pensées reçues, ${p.stats.echecs} échecs · ${(p.stats.ms / 1000).toFixed(1)} s en moyenne · ${p.actifs} en cours.` : 'Aucun modèle connecté.'}</p>`;

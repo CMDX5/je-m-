@@ -10,6 +10,7 @@ import { Habitants3D } from './render/villagers.js';
 import { Interface } from './ui/panel.js';
 import { Penseur } from './sim/penseur.js';
 import { PenseurClaude } from './sim/penseur-claude.js';
+import { PenseurGroq } from './sim/penseur-groq.js';
 import { nomComplet, libelleMetier } from './sim/villager.js';
 import { PLAZA } from './world/layout.js';
 import { heightAt } from './world/heightmap.js';
@@ -126,9 +127,12 @@ const ui = new Interface(sim, {
 // ---------- Pensée des habitants (modèle de langage) ----------
 // Sur claude.ai (téléphone compris), les habitants pensent avec Claude, sur le compte du joueur ;
 // ailleurs, avec le serveur local (Ollama…).
+// En ligne (Vercel), avec le modèle gratuit de Groq, en continu.
 const surClaude = typeof window.claude?.use === 'function';
-const SEUIL_ATTENTE = surClaude ? 5 : 12;
-const penseur = surClaude ? new PenseurClaude(sim) : new Penseur(sim);
+const configServeur = surClaude ? null : await fetch('api/config').then((r) => r.json()).catch(() => null);
+const surGroq = configServeur?.mode === 'groq';
+const SEUIL_ATTENTE = surClaude ? 5 : surGroq ? 10 : 12;
+const penseur = surClaude ? new PenseurClaude(sim) : surGroq ? new PenseurGroq(sim) : new Penseur(sim);
 ui.penseur = penseur;
 penseur.verifier();
 
