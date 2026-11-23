@@ -27,7 +27,6 @@ export class Interface {
     this.onglet = 'village';
     this.selection = null;
     this.filtre = { texte: '', metier: '', tri: 'nom' };
-    this.montrerPensees = false;
     this.dernierRendu = 0;
     this.penseur = null;
     this.nbRequetesVues = 0;
@@ -324,11 +323,11 @@ export class Interface {
   vueParoles() {
     const s = this.sim;
     const f = this.filtreParoles || 'flux';
-    const filtres = [['flux', 'Ce qui se dit'], ['tout', 'Vie intérieure'], ['mots', 'Pensées intimes'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
+    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['mots', 'Pensées intimes'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent']];
     let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
-    if (f === 'flux') {
-    out += `<label class="note"><input type="checkbox" id="voir-pensees-flux" ${this.montrerPensees ? 'checked' : ''}> Montrer aussi les pensées intérieures</label>`;
-    const dits = s.flux.filter((x) => this.montrerPensees || x.type !== 'pensee').slice(-90).reverse();
+    if (f === 'flux' || f === 'fluxtout') {
+    out += `<p class="note">${f === 'flux' ? 'Seulement ce qui est dit à voix haute.' : 'Tout ce qu\'ils disent et pensent, y compris les pensées de simple routine.'}</p>`;
+    const dits = s.flux.filter((x) => f === 'fluxtout' || x.type !== 'pensee').slice(-90).reverse();
     if (!dits.length) out += `<p class="note">Personne n'a encore parlé.</p>`;
     for (const x of dits) {
       const v = x.id >= 0 ? s.habitant(x.id) : null;
@@ -440,7 +439,6 @@ export class Interface {
     if (id === 'recherche') { this.filtre.texte = e.target.value; this.rafraichirListe(); }
     else if (id === 'filtre-metier') { this.filtre.metier = e.target.value; this.rafraichirListe(); }
     else if (id === 'tri') { this.filtre.tri = e.target.value; this.rafraichirListe(); }
-    else if (id === 'voir-pensees-flux') { this.montrerPensees = e.target.checked; this.rendreContenu(true); }
   }
 
   rafraichirListe() {
