@@ -32,6 +32,8 @@ const ETAT = {
   se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend',
 };
 const TON = { chaleureux: 'd’un ton chaleureux', tendu: 'd’un ton tendu', colere: 'avec colère', triste: 'd’un ton triste', joyeux: 'd’un ton joyeux' };
+// le ton choisi par l'habitant, rendu en français ; un ton inconnu est repris tel quel
+const commentDit = (ton) => (!ton || ton === 'calme' ? '' : ` ${TON[sansAccent(ton)] || `d’un ton ${ton}`}`);
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 export class Simulation {
@@ -416,7 +418,7 @@ export class Simulation {
     if (!action) return this.invalide(v, "cette action n'existe pas");
     const duree = Number.isFinite(Number(d.duree_minutes)) ? Number(d.duree_minutes) : 0;
     const parole = clip(d.parole, 400);
-    const ton = TON[d.ton] ? d.ton : 'calme';
+    const ton = clip(d.ton, 24).toLowerCase();
     const objet = ['nourriture', 'eau', 'pieces', 'remedes', 'huile'].includes(d.objet) ? d.objet : null;
     const qte = clamp(Number(d.quantite) || 1, 0, 200);
     const spec = { action, parole, ton, objet, qte, pret: !!d.pret };
@@ -698,7 +700,7 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: null, ton, lieu: v.activite?.nomLieu });
-    for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${commentDit(ton)} : « ${texte} »`);
   }
 
   parler(v, cible, texte, ton) {
@@ -711,7 +713,8 @@ export class Simulation {
     }
     c.tours++;
     c.fin = this.temps + clamp(texte.length / 12, 3, 8) + 3;
-    c.dispute = ton === 'colere' || (ton === 'tendu' && c.dispute);
+    const t = sansAccent(ton || '');
+    c.dispute = t.startsWith('colere') || (t.startsWith('tendu') && c.dispute);
     v.conversation = cible.conversation = c;
     v.dir = Math.atan2(cible.x - v.x, cible.z - v.z);
     cible.dir = Math.atan2(v.x - cible.x, v.z - cible.z);
@@ -720,10 +723,10 @@ export class Simulation {
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: cible.id, ton, lieu: v.activite?.nomLieu });
     // la cible entend et doit pouvoir répondre
     const dormait = cible.activite?.action === 'dormir' && cible.statut === 'agit';
-    noter(cible, this.temps, `${dormait ? 'Tu es réveillé. ' : ''}${v.prenom} te dit${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    noter(cible, this.temps, `${dormait ? 'Tu es réveillé. ' : ''}${v.prenom} te dit${commentDit(ton)} : « ${texte} »`);
     if (cible.statut === 'reflechit') cible.reparler = true;
     else { cible.path = null; cible.statut = 'attend'; cible.depuis = this.temps; cible.priorite = true; }
-    for (const o of this.entendent(v)) if (o !== cible) noter(o, this.temps, `${v.prenom} dit à ${cible.prenom}${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    for (const o of this.entendent(v)) if (o !== cible) noter(o, this.temps, `${v.prenom} dit à ${cible.prenom}${commentDit(ton)} : « ${texte} »`);
     if (c.dispute && !c.loggee) {
       c.loggee = true;
       this.stats.disputes++;

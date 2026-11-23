@@ -7,7 +7,7 @@
 
 import { promptLot, appliquerLot } from './penseur-claude.js';
 
-const TAILLE_GROUPE = 12;
+const TAILLE_GROUPE = 8; // moins d'habitants par demande : chacun garde mieux sa propre voix
 const ECART_MIN_MS = 2500; // laisse respirer les limites gratuites
 
 export const FOURNISSEURS = {

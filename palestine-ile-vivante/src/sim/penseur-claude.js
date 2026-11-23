@@ -9,7 +9,7 @@ import { construirePrompt, infosVillage } from './perception.js';
 
 const TAILLE_GROUPE = 16;
 
-const CONSIGNE = `Tu vas prêter ta pensée, l'un après l'autre, à plusieurs habitants d'un même village. Pour CHACUN, mets-toi entièrement à sa place : il ne connaît que SA propre perception (ci-dessous) et ignore ce que vivent les autres et ce que tu décides pour eux. Ne mélange pas leurs vies. Chacun décide librement, selon ce qu'il vit.
+const CONSIGNE = `Tu vas prêter ta voix, l'un après l'autre, à plusieurs habitants d'un même village. Pour CHACUN, sois entièrement lui : il ne connaît que SA propre perception (ci-dessous) et ignore ce que vivent les autres et ce qui se décide pour eux. Ne mélange pas leurs vies, ne les fais pas se ressembler.
 
 Voici les règles de ce monde, identiques pour chacun :
 
@@ -17,7 +17,7 @@ Voici les règles de ce monde, identiques pour chacun :
 
 const FORMAT = `
 
-FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Pensée et parole courtes (une ou deux phrases). Exemple de forme : {"habitants": [{"id": 3, "pensee": "...", "humeur": 60, "action": "travailler", "parole": ""}]}`;
+FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Reste bref : quelques phrases au plus par habitant. Exemple de forme : {"habitants": [{"id": 3, "pensee": "...", "humeur": 60, "action": "travailler", "parole": ""}]}`;
 
 const MESSAGES = {
   not_granted: "Vous n'avez pas autorisé cette page à utiliser Claude. Rechargez la page pour qu'elle vous le redemande.",

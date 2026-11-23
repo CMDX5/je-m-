@@ -330,8 +330,8 @@ export class Interface {
       const a = x.a != null ? s.habitant(x.a) : null;
       const qui = x.type === 'conseil' ? 'Le conseil' : v ? `<span class="lien" data-hab="${v.id}">${esc(v.prenom)}</span>` : '';
       const vers = x.type === 'conseil' ? (a ? ` à ${esc(a.prenom)}` : ' à tout le village') : a ? ` à <span class="lien" data-hab="${a.id}">${esc(a.prenom)}</span>` : '';
-      const ton = x.ton && TONS[x.ton] ? ` <small class="note">(${TONS[x.ton]})</small>` : '';
-      out += `<div class="journal-e ${x.type === 'pensee' ? 'pensee-e' : x.ton === 'colere' ? 'mal' : x.type === 'conseil' ? 'conseil' : ''}"><time>${esc(s.horodatage(x.t))}${x.lieu ? ` · ${esc(x.lieu)}` : ''}</time>${qui}${x.type === 'pensee' ? ' pense' : vers + ' :'} « ${esc(x.texte)} »${ton}</div>`;
+      const ton = x.ton && x.ton !== 'calme' ? ` <small class="note">(${esc(TONS[x.ton] || x.ton)})</small>` : '';
+      out += `<div class="journal-e ${x.type === 'pensee' ? 'pensee-e' : /^col[eè]re/.test(x.ton || '') ? 'mal' : x.type === 'conseil' ? 'conseil' : ''}"><time>${esc(s.horodatage(x.t))}${x.lieu ? ` · ${esc(x.lieu)}` : ''}</time>${qui}${x.type === 'pensee' ? ' pense' : vers + ' :'} « ${esc(x.texte)} »${ton}</div>`;
     }
     return out;
   }

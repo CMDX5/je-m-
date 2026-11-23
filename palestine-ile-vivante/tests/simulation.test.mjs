@@ -24,7 +24,9 @@ assert.equal(sim.habitant(0).statut, 'agit');
 
 // Perception : en français, sans consigne de comportement
 const prompt = sim.construirePrompt(5);
-assert.ok(/Faim :/.test(prompt) && /Le village :/.test(prompt) && /Que fais-tu/.test(prompt));
+assert.ok(/Ce que tu ressens :/.test(prompt) && /Le village :/.test(prompt) && /Réponds par le JSON/.test(prompt));
+assert.ok(!/\/100/.test(prompt), 'des sensations, pas des chiffres');
+for (const consigne of ['Tu peux aider', 'de préférence', 'Que fais-tu', 'te presse', 'enfants et jeunes']) assert.ok(!prompt.includes(consigne) && !SYSTEME.includes(consigne), `aucune consigne de comportement : « ${consigne} »`);
 assert.ok(prompt.length < 2600, `perception compacte (${prompt.length} caractères)`);
 
 // --- Cinq jours avec des décisions tirées au hasard (fixture) ---

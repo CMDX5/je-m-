@@ -43,8 +43,8 @@ assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'llama-3
 p.tick();
 assert.equal(p.actifs, 1, 'un groupe part réfléchir tout seul');
 await attendre();
-assert.equal(p.stats.ok, 12, '12 habitants ont reçu leur décision');
-assert.equal(sim.habitants.filter((v) => v.pensee === 'Je vais au marché.').length, 12);
+assert.equal(p.stats.ok, 8, 'un groupe de 8 habitants a reçu sa décision');
+assert.equal(sim.habitants.filter((v) => v.pensee === 'Je vais au marché.').length, 8);
 p.tick();
 assert.equal(p.actifs, 0, 'écart minimal entre deux appels respecté');
 
@@ -53,7 +53,7 @@ assert.deepEqual(p.entrees.map((e) => e.principal), [true, false], 'le petit mod
 // limite par minute sur le bon modèle : courte pause, sans alarmer le joueur ni passer au petit modèle
 mode = 'limite';
 await relancer(p);
-assert.equal(sim.habitants.filter((v) => v.statut === 'attend' && v.priorite).length, 12, 'modèle indisponible : les 12 habitants gardent leur tour, en tête de file');
+assert.equal(sim.habitants.filter((v) => v.statut === 'attend' && v.priorite).length, 8, 'modèle indisponible : les 8 habitants gardent leur tour, en tête de file');
 assert.ok(sim.habitants.every((v) => !v.echecs), 'personne n\'est réduit à ne rien faire');
 assert.ok(p.pauses.get('groq|llama-3.3-70b-versatile') - performance.now() > 6000, 'limite gratuite : le modèle souffle');
 assert.equal(p.derniereErreur, '', 'pause courte : pas de message');
@@ -84,8 +84,8 @@ for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p.pauser({ 
 const avant = p.stats.ok;
 await relancer(p);
 assert.equal(envois.at(-1), 'gemini|gemini-2.5-flash-lite');
-assert.equal(p.stats.ok, avant + 12, 'Gemini a pris le relais');
-assert.equal(p.parFournisseur.gemini, 12);
+assert.equal(p.stats.ok, avant + 8, 'Gemini a pris le relais');
+assert.equal(p.parFournisseur.gemini, 8);
 assert.equal(p.fournisseur, 'Groq + Gemini (gratuit)');
 
 // Gemini surchargé (503) : ce modèle souffle, le suivant prend le relais, sans message technique

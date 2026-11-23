@@ -12,12 +12,14 @@ const mot = (x, bas, hauts) => {
 
 function etatCorps(v) {
   const b = v.besoins;
-  const faim = mot(b.faim, 'tu es affamé', [[75, 'tu es rassasié'], [50, "tu n'as pas faim"], [30, 'tu as faim'], [15, 'tu as très faim']]);
-  const soif = mot(b.soif, 'tu es assoiffé', [[75, "tu n'as pas soif"], [50, 'tu as un peu soif'], [30, 'tu as soif'], [15, 'tu as très soif']]);
-  const fatigue = mot(b.energie, "tu t'écroules de fatigue", [[75, 'tu es en forme'], [50, 'tu es un peu fatigué'], [30, 'tu es fatigué'], [15, 'tu es épuisé']]);
-  const sante = v.malade ? 'tu es malade' : mot(b.sante, 'tu es très affaibli', [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile']]);
-  const secu = mot(b.securite, 'tu as très peur', [[70, 'tu te sens en sécurité'], [45, 'tu te sens un peu inquiet'], [25, 'tu te sens menacé']]);
-  return `Faim : ${faim} (${Math.round(b.faim)}/100). Soif : ${soif} (${Math.round(b.soif)}/100). Forme : ${fatigue} (${Math.round(b.energie)}/100). Santé : ${sante} (${Math.round(b.sante)}/100). Sécurité : ${secu} (${Math.round(b.securite)}/100).`;
+  const e = v.genre === 'F' ? 'e' : ''; // accord : « tu es fatiguée »
+  const faim = mot(b.faim, `tu es affamé${e}`, [[75, `tu es rassasié${e}`], [50, "tu n'as pas faim"], [30, 'tu as faim'], [15, 'tu as très faim']]);
+  const soif = mot(b.soif, `tu es assoiffé${e}`, [[75, "tu n'as pas soif"], [50, 'tu as un peu soif'], [30, 'tu as soif'], [15, 'tu as très soif']]);
+  const fatigue = mot(b.energie, "tu t'écroules de fatigue", [[75, 'tu es en forme'], [50, `tu es un peu fatigué${e}`], [30, `tu es fatigué${e}`], [15, `tu es épuisé${e}`]]);
+  const sante = v.malade ? 'tu es malade' : mot(b.sante, `tu es très affaibli${e}`, [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile']]);
+  const secu = mot(b.securite, 'tu as très peur', [[70, 'tu te sens en sécurité'], [45, (e ? 'tu te sens un peu inquiète' : 'tu te sens un peu inquiet')], [25, `tu te sens menacé${e}`]]);
+  // des sensations, pas des chiffres : personne ne connaît sa soif « à 64 sur 100 »
+  return `${faim}, ${soif}, ${fatigue}, ${sante}, ${secu}.`;
 }
 
 function periode(h) {
@@ -79,7 +81,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   if (v.identite) L.push(`Ce que tu écris de toi : ${v.identite}`);
   L.push(`Ton foyer : ${maison?.nom || 'ta maison'}, ${occupants} personne(s) pour ${couchages} couchage(s)${famille ? `. Ta famille : ${famille}` : '. Tu vis seul'}.`);
   L.push('');
-  L.push(`Ton corps — ${etatCorps(v)}`);
+  L.push(`Ce que tu ressens : ${etatCorps(v)}`);
   const p = v.poche;
   const porte = [p.nourriture >= 0.5 && `${Math.round(p.nourriture * 10) / 10} ration(s)`, p.eau >= 0.5 && `${Math.round(p.eau)} dose(s) d'eau`, p.huile >= 0.5 && `${Math.round(p.huile)} jarre(s) d'huile`, p.remedes >= 0.5 && `${Math.round(p.remedes)} remède(s)`].filter(Boolean).join(', ');
   L.push(`Tu as ${Math.round(p.pieces)} pièce(s) sur toi${porte ? ` et tu portes : ${porte}` : ''}. Chez toi : ${Math.round(foyer?.nourriture ?? 0)} ration(s), ${Math.round(foyer?.eau ?? 0)} dose(s) d'eau.`);
@@ -90,7 +92,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   L.push(`Où tu es : ${lieuActuel(sim, v)}.`);
   const la = quiEstLa(sim, v);
   L.push(la.length ? `Autour de toi : ${la.join(' ; ')}.` : 'Il n\'y a personne autour de toi.');
-  if (v.urgence) L.push(`Ton corps te presse : ${v.urgence}.`);
+  if (v.urgence) L.push(`Ton corps : ${v.urgence}.`);
 
   const ev = v.evenements.slice(-10);
   if (ev.length) {
@@ -99,7 +101,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     for (const e of ev) L.push(`- ${e.texte}`);
   }
 
-  const souv = v.souvenirs.slice(-8);
+  const souv = v.souvenirs.slice(-12);
   if (v.resume || souv.length) {
     L.push('');
     if (v.resume) L.push(`Ce que tu retiens de ta vie : ${v.resume}`);
@@ -108,15 +110,16 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
       for (const s of souv) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
     }
   }
-  const concernes = new Set([...v.famille, ...sim.habitants.filter((o) => o !== v && (o.interieur ? o.batiment === v.batiment && v.interieur : !v.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10)).map((o) => o.id)]);
+  const recents = Object.entries(v.avis).sort((a, b) => (b[1].t ?? 0) - (a[1].t ?? 0)).slice(0, 4).map(([id]) => Number(id));
+  const concernes = new Set([...v.famille, ...recents, ...sim.habitants.filter((o) => o !== v && (o.interieur ? o.batiment === v.batiment && v.interieur : !v.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10)).map((o) => o.id)]);
   const avis = [...concernes].filter((id) => v.avis[id]).map((id) => `${sim.habitant(id).prenom} : ${v.avis[id].texte}`);
-  if (avis.length) L.push(`Ton avis sur ceux qui sont là : ${avis.join(' ; ')}.`);
+  if (avis.length) L.push(`Ce que tu penses de tes proches et des gens autour de toi : ${avis.join(' ; ')}.`);
 
   if (!commun) return L.join('\n');
   L.push('');
   L.push(infosVillage(sim));
   L.push('');
-  L.push('Que fais-tu maintenant ? Réponds par le JSON.');
+  L.push('Réponds par le JSON.');
   return L.join('\n');
 }
 
