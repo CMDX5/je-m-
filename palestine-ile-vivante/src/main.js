@@ -8,6 +8,7 @@ import { creerTerrain, creerVegetation } from './render/terrain.js';
 import { Village } from './render/buildings.js';
 import { Habitants3D } from './render/villagers.js';
 import { Interface } from './ui/panel.js';
+import { Cerveau } from './sim/cerveau.js';
 import { nomComplet, libelleMetier } from './sim/villager.js';
 import { PLAZA } from './world/layout.js';
 import { heightAt } from './world/heightmap.js';
@@ -22,6 +23,9 @@ function ecrireStockage(cle, val) {
   try { val === null ? localStorage.removeItem(cle) : localStorage.setItem(cle, val); return true; } catch { return false; }
 }
 
+// laisser le message de chargement s'afficher avant le calcul des premiers jours
+await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+
 // ---------- Simulation ----------
 let sim;
 const aCharger = lireStockage(CLE_A_CHARGER);
@@ -30,7 +34,8 @@ if (aCharger) {
   try { sim = Simulation.charger(lireStockage(CLE_SAUVEGARDE)); } catch (e) { console.warn('Sauvegarde illisible', e); }
 }
 const params = new URLSearchParams(location.search);
-if (!sim) sim = new Simulation({ seed: Number(params.get('graine')) || 2026 }).init();
+const jours = params.has('histoire') ? Number(params.get('histoire')) : 10;
+if (!sim) sim = new Simulation({ seed: Number(params.get('graine')) || 2026 }).init({ prehistoire: jours });
 
 // ---------- Rendu ----------
 const canvas = document.getElementById('scene');
@@ -111,6 +116,14 @@ const ui = new Interface(sim, {
     ecrireStockage(CLE_A_CHARGER, '1');
     location.reload();
   },
+  parler: async (id, message) => {
+    const v = sim.habitant(id);
+    let rep = await cerveau.parler(id, message);
+    let source = 'Claude';
+    if (!rep) { rep = sim.reponseLocale(v, message); source = 'locale'; }
+    sim.recevoirParole(id, message, rep, source);
+    ui.rendreFiche(true);
+  },
   recommencer: () => {
     if (!confirm('Générer une nouvelle île ? La partie en cours non sauvegardée sera perdue.')) return;
     const url = new URL(location.href);
@@ -118,7 +131,18 @@ const ui = new Interface(sim, {
     location.href = url.toString();
   },
 });
-window.__ile = { sim, ui, camera, controls, select: (id) => ui.actions.selectionner(id, true) };
+// ---------- Claude : réflexion du soir et parole ----------
+const cerveau = new Cerveau(sim);
+ui.cerveau = cerveau;
+cerveau.verifier();
+sim.on('reflexion', async (ids) => {
+  for (const id of ids) {
+    const d = cerveau.disponible ? await cerveau.reflechir(id) : null;
+    sim.appliquerReflexion(id, d || sim.reflexionLocale(sim.habitant(id)), d ? 'Claude' : 'locale');
+  }
+});
+
+window.__ile = { sim, ui, camera, controls, cerveau, select: (id) => ui.actions.selectionner(id, true) };
 
 const raycaster = new THREE.Raycaster();
 const souris = new THREE.Vector2();

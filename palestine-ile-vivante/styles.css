@@ -163,3 +163,25 @@ select option { background: #2c2822; }
   #barre { padding: 6px 10px; gap: 6px 10px; }
   .titre strong { font-size: 13px; }
 }
+
+/* émergence : journée type */
+.routine { display: flex; flex-direction: column; gap: 2px; }
+.routine-ligne { display: grid; grid-template-columns: 82px repeat(24, 1fr); gap: 1px; align-items: center; font-size: 11px; color: var(--doux); }
+.routine-ligne i { height: 12px; border-radius: 2px; background: var(--accent); }
+.routine-ligne.heures b { font-weight: 400; font-size: 10px; }
+
+/* dialogue */
+.dialogue p { margin: 4px 0; font-size: 12.5px; line-height: 1.4; }
+.dialogue p.moi { color: var(--doux); }
+.dialogue p.lui b { color: var(--accent); }
+.parole { display: flex; gap: 6px; margin-top: 6px; }
+.parole input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--texte); background: rgba(0,0,0,0.3); border: 1px solid var(--bord); border-radius: 7px; padding: 6px 8px; }
+.pensee small { display: block; font-style: normal; font-size: 11px; color: var(--doux); margin-top: 3px; }
+.journal-e.ancien { opacity: 0.6; }
+#onglets button { font-size: 11.5px; }
+#onglets { flex-wrap: wrap; }
+#onglets button { flex: 1 1 30%; padding: 7px 2px; }
+#onglets { flex-shrink: 0; }
+#panneau { top: 80px; }
+#fiche { max-height: calc(100% - 92px); }
+@media (max-width: 900px) { #panneau { top: auto; } }

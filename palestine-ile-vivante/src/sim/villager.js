@@ -1,7 +1,10 @@
-// Habitant : identité, personnalité, besoins, relations et mémoire simulée.
+// Habitant : identité, tempérament inné, besoins, relations, mémoire.
+// Le tempérament ne dicte aucun comportement : il règle la façon d'apprendre
+// (curiosité = goût d'essayer, patience = mémoire longue, etc.).
 
 import { clamp } from './rng.js';
 import { METIERS } from './data.js';
+import { nouvelEsprit, croyances } from './esprit.js';
 
 export const TRAITS = {
   sociabilite: ['Réservé', 'Réservée', 'Sociable'],
@@ -13,14 +16,15 @@ export const TRAITS = {
   piete: ['Discret sur la foi', 'Discrète sur la foi', 'Pieux', 'Pieuse'],
 };
 
+// Ce que chaque trait règle vraiment dans l'esprit simulé.
 export const TRAIT_LABELS = {
-  sociabilite: 'Sociabilité',
-  ardeur: 'Ardeur au travail',
-  generosite: 'Générosité',
-  temperament: 'Tempérament vif',
-  patience: 'Patience',
-  curiosite: 'Curiosité',
-  piete: 'Piété',
+  sociabilite: 'Sociabilité (besoin des autres, imitation)',
+  ardeur: "Ardeur (besoin d'être utile)",
+  generosite: 'Empathie (souffre de la souffrance des autres)',
+  temperament: 'Tempérament (rancune, emportement)',
+  patience: 'Patience (prévoyance, mémoire longue)',
+  curiosite: "Curiosité (goût d'essayer l'inconnu)",
+  piete: 'Spiritualité (besoin de sérénité)',
 };
 
 export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
@@ -41,11 +45,15 @@ export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
       energie: rng.range(65, 95),
       social: rng.range(45, 85),
       sante: age > 65 ? rng.range(60, 85) : rng.range(80, 100),
+      serenite: rng.range(50, 80),
+      estime: rng.range(40, 70),
     },
-    moral: rng.range(55, 75),
-    confiance: clamp(50 + rng.range(-12, 12), 0, 100),
-    metier: null,
-    metierSouhaite: null,
+    moral: 60,
+    confiance: 50, // envers le conseil : se construit uniquement par ce qu'il vit
+    metier: null, // reconnu d'après ce qu'il fait réellement
+    demande: null, // ce que le conseil lui a demandé de faire
+    intention: null, // formée en réfléchissant (le soir, ou avec Claude)
+    reflexion: null,
     famille: [],
     x: 0, z: 0, dir: 0,
     path: null,
@@ -57,11 +65,10 @@ export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
     memoire: [],
     malade: false,
     reposJusqua: 0,
-    boost: 0, // humeur temporaire (événements)
     dernierRepas: 0,
     dernierEcoute: -1,
-    disputesJour: 0,
-    stats: { conversations: 0, disputes: 0, aides: 0 },
+    esprit: nouvelEsprit(),
+    stats: { conversations: 0, disputes: 0, aides: 0, dons: 0, vols: 0, excuses: 0 },
   };
 }
 
@@ -75,31 +82,30 @@ export function libelleMetier(v, m = v.metier) {
   return v.genre === 'F' ? d.nomF : d.nom;
 }
 
-// Petit portrait textuel de la personnalité.
 export function decrire(v) {
   const t = v.traits, f = v.genre === 'F';
   const out = [];
-  const pick = (k, lo = 0.3, hi = 0.7) => {
+  for (const k of Object.keys(TRAITS)) {
     const l = TRAITS[k];
-    if (t[k] <= lo) out.push(l.length === 3 ? (f ? l[1] : l[0]) : f ? l[1] : l[0]);
-    else if (t[k] >= hi) out.push(l.length === 3 ? l[2] : f ? l[3] : l[2]);
-  };
-  for (const k of Object.keys(TRAITS)) pick(k);
+    if (t[k] <= 0.3) out.push(f ? l[1] : l[0]);
+    else if (t[k] >= 0.7) out.push(l.length === 3 ? l[2] : f ? l[3] : l[2]);
+  }
   if (!out.length) out.push(f ? 'Pondérée' : 'Pondéré', 'sans excès');
   return out.slice(0, 4).join(', ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
 }
 
 // ---------- Relations ----------
+// aff = ce que l'on attend d'une personne, appris au fil des rencontres (-100..100)
+// fam = familiarité (0..100)
 
 export function relation(v, autreId) {
   let r = v.relations[autreId];
-  if (!r) r = v.relations[autreId] = { aff: 0, fam: 5 };
+  if (!r) r = v.relations[autreId] = { aff: 0, fam: 0 };
   return r;
 }
 
 export function changerAffinite(a, b, delta) {
   const r = relation(a, b.id);
-  // l'effet sature près des extrêmes
   const k = delta > 0 ? (100 - r.aff) / 100 : (100 + r.aff) / 100;
   r.aff = clamp(r.aff + delta * (0.4 + 0.6 * k), -100, 100);
 }
@@ -114,15 +120,11 @@ export function libelleRelation(r, famille) {
   return 'Voisin';
 }
 
-// ---------- Mémoire simulée ----------
-// Chaque souvenir : { t, type, texte, valence (-1..1), importance (0..1), sujet }
-// sujet = id d'habitant, 'conseil' (le joueur) ou null (événement collectif).
-
-const MEMOIRE_MAX = 45;
+// ---------- Mémoire épisodique ----------
+const MEMOIRE_MAX = 50;
 
 export function memoriser(v, t, souvenir) {
   const s = { t, importance: 0.4, valence: 0, sujet: null, ...souvenir };
-  // éviter les doublons trop rapprochés (même type, même sujet, même journée)
   const jour = Math.floor(t / 1440);
   const doublon = v.memoire.find((m) => m.type === s.type && m.sujet === s.sujet && Math.floor(m.t / 1440) === jour && m.texte === s.texte);
   if (doublon) {
@@ -131,7 +133,6 @@ export function memoriser(v, t, souvenir) {
   }
   v.memoire.push(s);
   if (v.memoire.length > MEMOIRE_MAX) {
-    // on oublie le souvenir le moins important (les plus anciens à égalité)
     let k = 0;
     for (let i = 1; i < v.memoire.length; i++) if (v.memoire[i].importance < v.memoire[k].importance) k = i;
     v.memoire.splice(k, 1);
@@ -139,16 +140,12 @@ export function memoriser(v, t, souvenir) {
   return s;
 }
 
-// Les souvenirs s'estompent ; les plus marquants résistent mieux.
 export function estomperMemoire(v) {
-  for (const m of v.memoire) {
-    const resistance = m.importance > 0.75 ? 0.985 : 0.94;
-    m.importance *= resistance;
-  }
+  const longue = 0.9 + 0.08 * v.traits.patience;
+  for (const m of v.memoire) m.importance *= m.importance > 0.75 ? 0.985 : longue;
   v.memoire = v.memoire.filter((m) => m.importance > 0.06);
 }
 
-// Ce que l'habitant « pense » de quelqu'un, d'après ses souvenirs.
 export function souvenirDe(v, sujet) {
   let s = 0;
   for (const m of v.memoire) if (m.sujet === sujet) s += m.valence * m.importance;
@@ -161,31 +158,28 @@ export function souvenirMarquant(v, filtre = () => true) {
   return best;
 }
 
-// ---------- Pensée affichée ----------
-
+// ---------- Pensée du moment (d'après son état réel et son vécu) ----------
 export function pensee(v, sim) {
   const b = v.besoins;
+  if (v.reflexion && sim.temps - v.reflexion.t < 1440) return v.reflexion.texte;
   if (v.conversation) {
     const c = v.conversation;
     const autre = sim.habitant(c.a === v.id ? c.b : c.a);
-    return v.conversation.dispute ? `Je ne laisserai pas ${autre.prenom} avoir le dernier mot.` : `Bon moment avec ${autre.prenom}.`;
+    return c.dispute ? `Je ne laisserai pas ${autre.prenom} avoir le dernier mot.` : `Bon moment avec ${autre.prenom}.`;
   }
-  if (v.malade) return 'Je ne me sens pas bien… il faudrait passer au dispensaire.';
-  if (b.faim < 25) return sim.res.nourriture < 10 ? "Les réserves sont vides, j'ai le ventre creux." : "J'ai faim, vivement le repas.";
+  if (v.malade) return 'Je ne me sens pas bien…';
+  if (b.faim < 25) return (sim.foyers[v.foyer]?.nourriture ?? 0) < 1 ? "Il n'y a plus rien à la maison, j'ai le ventre creux." : "J'ai faim.";
   if (b.energie < 20) return 'Je tombe de fatigue.';
-  if (b.social < 25) return "Je me sens seul" + (v.genre === 'F' ? 'e' : '') + ", j'aimerais parler à quelqu'un.";
-  const conflit = sim.conflits.find((c) => !c.resolu && (c.a === v.id || c.b === v.id));
-  if (conflit) {
-    const autre = sim.habitant(conflit.a === v.id ? conflit.b : conflit.a);
-    return `Cette histoire avec ${autre.prenom} me reste en travers de la gorge.`;
+  const griefs = Object.entries(v.esprit.griefs).sort((a, c) => c[1] - a[1]);
+  if (griefs.length && griefs[0][1] > 0.35) {
+    const o = sim.habitant(Number(griefs[0][0]));
+    return `Je n'ai pas digéré ce que ${o.prenom} m'a fait (${v.esprit.griefMotif?.[o.id] || 'un tort'}).`;
   }
-  if (v.metier !== v.metierSouhaite && v.metierSouhaite && v.age >= 17 && v.age < 65 && v.traits.ardeur > 0.3) {
-    if ((v.id * 7 + Math.floor(sim.temps / 600)) % 3 === 0) return `J'aimerais tant devenir ${libelleMetier(v, v.metierSouhaite).toLowerCase()}.`;
-  }
+  if (b.social < 25) return `Je me sens seul${v.genre === 'F' ? 'e' : ''}.`;
   const marquant = souvenirMarquant(v, (m) => m.importance > 0.55 && sim.temps - m.t < 2880);
-  if (marquant) return `Je repense encore à ça : ${marquant.texte.charAt(0).toLowerCase()}${marquant.texte.slice(1)}`;
-  if (v.moral > 75) return 'La vie est douce sur l\'île.';
-  if (v.moral < 35) return 'Rien ne va comme je voudrais en ce moment.';
-  if (v.confiance < 30) return "Le conseil ne nous écoute pas vraiment.";
-  return v.activite?.raison ? `${v.activite.raison.charAt(0).toUpperCase()}${v.activite.raison.slice(1)}.` : 'Une journée ordinaire.';
+  if (marquant) return `Je repense à ça : ${marquant.texte.charAt(0).toLowerCase()}${marquant.texte.slice(1)}`;
+  const c = croyances(sim, v, 1)[0];
+  if (c && c.effet > 0) return `J'ai appris que ${c.texte}.`;
+  if (v.esprit.appris < 5) return 'Je cherche encore comment m’y prendre ici.';
+  return v.moral > 70 ? 'La vie est douce sur l’île.' : v.moral < 40 ? 'Rien ne va comme je voudrais.' : 'Une journée ordinaire.';
 }
