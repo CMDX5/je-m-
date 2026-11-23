@@ -11,6 +11,7 @@ import { Interface } from './ui/panel.js';
 import { Penseur } from './sim/penseur.js';
 import { PenseurClaude } from './sim/penseur-claude.js';
 import { PenseurGroq } from './sim/penseur-groq.js';
+import { demarrerRapports } from './sim/rapport.js';
 import { nomComplet, libelleMetier } from './sim/villager.js';
 import { PLAZA } from './world/layout.js';
 import { heightAt } from './world/heightmap.js';
@@ -157,6 +158,9 @@ const SEUIL_ATTENTE = surClaude ? 5 : surGroq ? 10 : 12;
 const penseur = surClaude ? new PenseurClaude(sim) : surGroq ? new PenseurGroq(sim) : new Penseur(sim);
 ui.penseur = penseur;
 penseur.verifier();
+
+// En ligne (Vercel) : rapport régulier pour que Claude surveille la partie
+if (surGroq) demarrerRapports(sim, penseur);
 
 window.__ile = { sim, ui, camera, controls, penseur, select: (id) => ui.actions.selectionner(id, true) };
 
