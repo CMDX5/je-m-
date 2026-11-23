@@ -17,6 +17,7 @@ import { heightAt } from './world/heightmap.js';
 
 const CLE_SAUVEGARDE = 'ile-vivante:sauvegarde';
 const CLE_A_CHARGER = 'ile-vivante:a-charger';
+const CLE_AUTO = 'ile-vivante:auto'; // sauvegarde automatique
 
 function lireStockage(cle) {
   try { return localStorage.getItem(cle); } catch { return null; }
@@ -36,7 +37,23 @@ if (aCharger) {
   try { sim = Simulation.charger(lireStockage(CLE_SAUVEGARDE)); } catch (e) { console.warn('Sauvegarde illisible', e); }
 }
 const params = new URLSearchParams(location.search);
+// reprise automatique de la dernière partie (sauf si une nouvelle île est demandée)
+let reprise = false;
+if (!sim && !params.has('graine') && lireStockage(CLE_AUTO)) {
+  try { sim = Simulation.charger(lireStockage(CLE_AUTO)); reprise = true; } catch (e) { console.warn('Sauvegarde automatique illisible', e); }
+}
 if (!sim) sim = new Simulation({ seed: Number(params.get('graine')) || 2026 }).init();
+if (params.has('graine')) {
+  // l'adresse redevient normale : un rechargement reprendra cette nouvelle partie
+  try { const u = new URL(location.href); u.searchParams.delete('graine'); history.replaceState(null, '', u); } catch { /* adresse figée */ }
+}
+function sauverAuto() {
+  if (!sim.habitants.some((v) => v.nbDecisions > 0)) return;
+  ecrireStockage(CLE_AUTO, sim.serialiser());
+}
+setInterval(sauverAuto, 60000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sauverAuto(); });
+window.addEventListener('pagehide', sauverAuto);
 
 // ---------- Rendu ----------
 const canvas = document.getElementById('scene');
@@ -118,7 +135,12 @@ const ui = new Interface(sim, {
     location.reload();
   },
   recommencer: () => {
-    if (!confirm('Générer une nouvelle île ? La partie en cours non sauvegardée sera perdue.')) return;
+    // confirmation par un second toucher (les fenêtres de confirmation sont bloquées sur claude.ai)
+    if (!window.__confirmeNouvelle || Date.now() - window.__confirmeNouvelle > 5000) {
+      window.__confirmeNouvelle = Date.now();
+      return ui.toast('Touchez encore « Nouvelle île » pour confirmer : la partie en cours sera remplacée.', 'mal');
+    }
+    ecrireStockage(CLE_AUTO, null);
     const url = new URL(location.href);
     url.searchParams.set('graine', String(Math.floor(Math.random() * 1e6)));
     location.href = url.toString();
@@ -197,7 +219,8 @@ document.getElementById('commencer').addEventListener('click', () => {
   intro.remove();
   changerVitesse(4);
 });
-if (aCharger || params.has('direct')) { intro.remove(); changerVitesse(params.has('capture') ? 0 : 4); }
+if (reprise) ui.toast(`Partie reprise : ${sim.horodatage()}.`, 'bien');
+if (aCharger || reprise || params.has('direct')) { intro.remove(); changerVitesse(params.has('capture') ? 0 : 4); }
 document.getElementById('chargement').classList.add('fini');
 
 // ---------- Boucle ----------
