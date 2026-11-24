@@ -8,6 +8,7 @@
 import { promptLot, appliquerLot, promptLotBilan, appliquerLotBilan, TAILLE_BILAN } from './penseur-claude.js';
 
 const TAILLE_GROUPE = 8; // moins d'habitants par demande : chacun garde mieux sa propre voix
+const TAILLE_MIN = 4; // quand les limites gratuites se resserrent, les groupes rétrécissent jusqu'à 4
 const ECART_MIN_MS = 2500; // laisse respirer les limites gratuites
 const MAX_PARALLELE = 3; // plusieurs groupes à la fois, chacun vers un modèle différent (chaque modèle a ses propres limites)
 
@@ -83,6 +84,8 @@ export class PenseurGroq {
     this.entrees = []; // [{ f, m }] dans l'ordre de préférence
     this.pauses = new Map(); // "f|m" → fin de pause (performance.now)
     this.decisionsDepuisBilan = 0;
+    this.taille = TAILLE_GROUPE; // s'adapte aux limites gratuites : -2 à chaque refus, +1 après 6 réussites de suite
+    this.reussitesDeSuite = 0;
     this.retires = []; // modèles écartés pendant la partie (pour les rapports)
     this.erreurTechnique = '';
     this.jetons = new Map(); // "f|m" → jetons estimés par envoi
@@ -180,7 +183,7 @@ export class PenseurGroq {
     if (!this.disponible || this.actifs >= MAX_PARALLELE || maintenant - this.dernierEnvoi < ECART_MIN_MS) return;
     const e = this.choisir(maintenant);
     if (!e) return;
-    const ids = this.sim.demandes().slice(0, TAILLE_GROUPE);
+    const ids = this.sim.demandes().slice(0, this.taille);
     // Les décisions d'abord, mais le bilan du soir (souvenirs, qui je suis, leçons, questions) ne doit jamais être affamé :
     // quand peu d'habitants attendent, ou après trois groupes de décisions, ceux qui dorment font leur bilan.
     const dus = this.sim.demandesBilan();
@@ -237,6 +240,7 @@ export class PenseurGroq {
       if (sim !== this.sim) return;
       if (d.jetonsUtilises) this.jetons.set(k, (this.jetons.get(k) || d.jetonsUtilises) * 0.5 + d.jetonsUtilises * 0.5);
       this.reglerRythme(e, d.quota);
+      if (!bilan && ++this.reussitesDeSuite >= 6 && this.taille < TAILLE_GROUPE) { this.taille++; this.reussitesDeSuite = 0; }
       if (bilan) {
         this.stats.bilans = (this.stats.bilans || 0) + appliquerLotBilan(sim, ids, extraireJson(d.texte));
         this.derniereErreur = '';
@@ -256,6 +260,8 @@ export class PenseurGroq {
       if (err.silencieux) {
         this.derniereErreur = this.disponible ? '' : 'Aucun modèle ne convient sur ces comptes.';
       } else if (err.attente) {
+        this.taille = Math.max(TAILLE_MIN, this.taille - 2); // un refus de limite : des groupes plus petits consomment moins par appel
+        this.reussitesDeSuite = 0;
         // longue attente = quota du jour épuisé pour ce modèle : les groupes suivants iront vers un autre modèle
         this.pauser(e, Math.min(err.attente, 6 * 3600) * 1000);
         const reprise = this.pauseJusqua - performance.now();

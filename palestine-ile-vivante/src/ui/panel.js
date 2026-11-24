@@ -109,7 +109,7 @@ export class Interface {
     document.querySelectorAll('#vitesses button').forEach((b) => b.classList.toggle('actif', Number(b.dataset.v) === vitesse));
     const pieces = (x) => Math.floor(x);
     $('#ressources').innerHTML = [
-      ['Caisse', pieces(s.res.pieces), '#e6b450', 'Pièces du conseil : paient les salaires'],
+      ['Caisse', pieces(s.res.pieces), '#e6b450', s.joursDeCaisse() === null ? 'Pièces du conseil : paient les salaires' : `Pièces du conseil : ${s.joursDeCaisse().toFixed(1)} jour(s) de salaires`],
       ['Marché', pieces(s.res.nourriture), '#8fb85a', 'Rations à vendre'],
       ['Maisons', pieces(s.nourritureFoyers()), '#6f9a45', 'Rations dans les maisons'],
       ['Huile', pieces(s.res.huile), '#c9b04a', ''], ['Pierre', pieces(s.res.pierre), '#c8bba3', ''], ['Bois', pieces(s.res.bois), '#9c7a52', ''], ['Remèdes', pieces(s.res.remedes), '#7ac0b0', ''],
@@ -211,6 +211,7 @@ export class Interface {
         <div class="stat"><b>${dateDuVillage(s.temps).texte}</b><span>une année = 2 jours · ${s.stats.naissances || 0} naissance${(s.stats.naissances || 0) > 1 ? 's' : ''}, ${s.stats.deces || 0} décès</span></div>
         <div class="stat"><b>${malades}</b><span>malade${malades > 1 ? 's' : ''}</span></div>
         <div class="stat"><b>${Math.round(fin)}</b><span>rations dans les maisons</span></div>
+        <div class="stat ${(s.joursDeCaisse() ?? 9) < 1 ? 'alerte-stat' : ''}"><b>${s.joursDeCaisse() === null ? '—' : `${s.joursDeCaisse() < 10 ? s.joursDeCaisse().toFixed(1) : Math.round(s.joursDeCaisse())} j`}</b><span>de salaires en caisse (${Math.round(s.res.pieces)} pièces${s.historique.at(-1)?.salaires ? `, ${s.historique.at(-1).salaires} versées hier` : ''})</span></div>
         <div class="stat"><b>${Math.round(dettes)}</b><span>pièces de dettes entre habitants</span></div>
       </div>
       ${s.defunts.length ? `<h3>Disparus du village</h3>${[...s.defunts].reverse().slice(0, 20).map((d) => `<div class="relation"><span class="lien" data-hab="${d.id}">${esc(nomComplet(d))}</span><span class="note">${d.age} an${d.age > 1 ? 's' : ''} · ${esc(d.mort.cause)} · ${esc(depuis(d.mort.t, s.temps))}</span></div>`).join('')}` : ''}

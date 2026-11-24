@@ -81,11 +81,12 @@ assert.equal(await p.enregistrerCle('AIza_bonne', 'gemini'), true);
 assert.deepEqual(p.entrees.filter((e) => e.f === 'gemini').map((e) => e.m), ['gemini-2.5-flash-lite', 'gemini-2.5-flash'], 'Gemini : Flash-Lite puis Flash, rien d\'autre');
 assert.deepEqual(p.entrees.map((e) => e.m), ['llama-3.3-70b-versatile', 'gemini-2.5-flash-lite', 'gemini-2.5-flash', 'llama-3.1-8b-instant'], 'les bons modèles d\'abord, les autres en secours');
 for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p.pauser({ f: 'groq', m }, 3600e3);
-const avant = p.stats.ok;
+const avant = p.stats.ok, tailleAvant = p.taille;
+assert.ok(tailleAvant < 8, 'après des refus de limite, les groupes ont rétréci');
 await relancer(p);
 assert.equal(envois.at(-1), 'gemini|gemini-2.5-flash-lite');
-assert.equal(p.stats.ok, avant + 8, 'Gemini a pris le relais');
-assert.equal(p.parFournisseur.gemini, 8);
+assert.equal(p.stats.ok, avant + tailleAvant, 'Gemini a pris le relais');
+assert.equal(p.parFournisseur.gemini, tailleAvant);
 assert.equal(p.fournisseur, 'Groq + Gemini (gratuit)');
 
 // Gemini surchargé (503) : ce modèle souffle, le suivant prend le relais, sans message technique
@@ -195,4 +196,29 @@ console.log('En ligne : clés Groq et Gemini vérifiées, modèles choisis, limi
   assert.equal(sim4.habitants.filter((v) => v.bilanDu).length, 0, 'les quatre habitants ont fait leur bilan');
   globalThis.fetch = avantFetch;
   console.log('Équité : le bilan du soir part toutes les 3 décisions quand il y en a à faire. OK');
+}
+
+// Les groupes s'adaptent aux limites gratuites : plus petits après un refus, puis ils regrandissent peu à peu
+{
+  const sim5 = new Simulation({ seed: 31 }).init();
+  const p5 = new PenseurGroq(sim5);
+  await p5.enregistrerCle('gsk_bonne', 'groq');
+  limites.clear(); erreurs.clear();
+  assert.equal(p5.taille, 8);
+  mode = 'limite';
+  await relancer(p5);
+  assert.equal(p5.taille, 6, 'un refus de limite : -2');
+  for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p5.pauses.set(`groq|${m}`, 0);
+  await relancer(p5);
+  for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p5.pauses.set(`groq|${m}`, 0);
+  await relancer(p5);
+  assert.equal(p5.taille, 4, 'jamais moins de 4');
+  await relancer(p5);
+  for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p5.pauses.set(`groq|${m}`, 0);
+  await relancer(p5);
+  assert.equal(p5.taille, 4);
+  mode = 'ok';
+  for (let i = 0; i < 6; i++) { for (const m of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) p5.pauses.set(`groq|${m}`, 0); await relancer(p5); }
+  assert.equal(p5.taille, 5, 'après 6 réussites de suite : +1');
+  console.log('Quotas : les groupes rétrécissent après un refus et regrandissent ensuite. OK');
 }

@@ -23,6 +23,7 @@ import { NavGrid } from './navigation.js';
 import { buildLayout, makeBuilding, ZONES, randomPointInZone, FREE_HOUSE_SPOTS, PLAZA } from '../world/layout.js';
 
 const MIN_JOUR = 1440;
+const CAPACITE_MARCHE = 600; // rations que l'entrepôt du marché peut garder
 const VITESSE_MARCHE = 1.45;
 const RENDU = {
   dormir: 'dormir', manger: 'manger', boire: 'manger', travailler: 'travailler', aller: 'flaner', parler: 'socialiser',
@@ -99,7 +100,7 @@ export class Simulation {
     this.saisonNom = this.etatSaison.nom;
     this.navire = 0;
     this.historique = [];
-    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, salaires: 0, naissances: 0, deces: 0 };
+    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, salaires: 0, salairesVeille: 0, naissances: 0, deces: 0 };
     this.derniereHeure = Math.floor(this.temps / 60);
     this.cacheRoster = null;
     this.cacheMembres = null;
@@ -1228,9 +1229,30 @@ export class Simulation {
     }
   }
 
+  // Les rations du marché ne se gardent pas indéfiniment : elles se gâtent, plus vite par forte chaleur,
+  // et l'entrepôt a une capacité (le surplus se perd vite). Les vivres des maisons, eux, restent chez leurs habitants.
+  denrees() {
+    const stock = this.res.nourriture;
+    if (stock <= 0) return;
+    const perte = Math.min(stock, stock * 0.0015 * (1 + 2 * this.etatSaison.chaleur) + Math.max(0, stock - CAPACITE_MARCHE) * 0.08);
+    this.res.nourriture = stock - perte;
+    this.pertesJour = (this.pertesJour || 0) + perte;
+  }
+
+  // La caisse du conseil, en jours de salaires (d'après ce qui a été versé hier) ; null tant qu'on ne le sait pas.
+  joursDeCaisse() {
+    const h = this.historique.at(-1);
+    if (!h || !(h.salaires > 0)) return null;
+    return this.res.pieces / h.salaires;
+  }
+
   horaire() {
     const h = Math.round(this.heure()) % 24;
     this.saisons();
+    this.denrees();
+    const jours = this.joursDeCaisse();
+    if (jours !== null && jours < 1 && !this.caisseAlertee) { this.caisseAlertee = true; this.log('La caisse du conseil ne couvrira pas une journée de salaires.', 'mal'); }
+    else if (jours === null || jours >= 2) this.caisseAlertee = false;
     this.cycleDeVie();
     if (h === 6) this.meteoDuJour();
     if (this.navire && this.temps >= this.navire) { this.navire = 0; this.log('Le navire marchand a repris la mer.', 'evenement'); this.emit('navire', false); }
@@ -1244,7 +1266,11 @@ export class Simulation {
       jour: this.jour - 1, humeur: this.moyenne('humeur'), confiance: 0,
       nourriture: Math.round(this.res.nourriture + Object.values(this.foyers).reduce((s, f) => s + f.nourriture, 0)), marche: Math.round(this.res.nourriture),
       pieces: Math.round(this.res.pieces), poisson: this.monde.poisson,
+      salaires: Math.round(this.stats.salaires - (this.stats.salairesVeille || 0)), // pièces versées en salaires pendant la journée
     });
+    this.stats.salairesVeille = this.stats.salaires;
+    if (this.pertesJour >= 15) this.log(`Faute de place et à cause de la chaleur, ${Math.round(this.pertesJour)} rations du marché se sont gâtées.`, 'info');
+    this.pertesJour = 0;
     if (this.historique.length > 80) this.historique.shift();
     for (const v of this.habitants) {
       v.impaye = 0;
@@ -1489,6 +1515,7 @@ export class Simulation {
       sim.tous[v.id] = v;
     }
     sim.stats = { naissances: 0, deces: 0, ...sim.stats };
+    sim.stats.salairesVeille ??= sim.stats.salaires || 0;
     const convs = new Map();
     for (const v of sim.habitants) {
       if (v.statut === 'reflechit') v.statut = 'attend';

@@ -88,7 +88,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
 
   // ----- décision -----
   L.push(`Jour ${sim.jour}, ${hh}h${mm} (${periode(h)}). ${sim.meteoTexte()}`);
-  L.push(`Tu es ${nomComplet(v)}, ${v.age} ans, ${v.genre === 'F' ? 'une femme' : 'un homme'}. ${METIERS[v.metier]?.lieu ? `Ton métier : ${libelleMetier(v).toLowerCase()} (lieu de travail habituel : ${LIEUX[METIERS[v.metier].lieu].nom}).` : `Ta situation : ${libelleMetier(v).toLowerCase()}, sans métier confié.`}`);
+  L.push(`Tu es ${nomComplet(v)}, ${v.age} ans, ${v.genre === 'F' ? 'une femme' : 'un homme'}. ${v.metier === 'sansmetier' ? 'Tu es adulte et le conseil ne t\'a pas confié de métier.' : METIERS[v.metier]?.lieu ? `Ton métier : ${libelleMetier(v).toLowerCase()} (lieu de travail habituel : ${LIEUX[METIERS[v.metier].lieu].nom}).` : `Ta situation : ${libelleMetier(v).toLowerCase()}, sans métier confié.`}`);
   if (v.identite) L.push(`Ce que tu écris de toi : ${v.identite}`);
   L.push(`Ton foyer : ${maison?.nom || 'ta maison'}, ${occupants} personne(s) pour ${couchages} couchage(s)${famille ? `. Ta famille : ${famille}` : '. Tu vis seul'}.`);
   if (disparus.length) L.push(`Ceux que tu as perdus : ${disparus.join(' ; ')}.`);
