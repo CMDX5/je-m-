@@ -13,6 +13,19 @@ export const PLUIE_MIN = MOIS_MIN; // 240 minutes de jeu : quatre minutes à la 
 const RAMPE_PLUIE_MIN = 36; // la pluie monte puis décroît en 36 minutes de jeu
 
 const lerp = (a, b, t) => a + (b - a) * t;
+// ---------- La date du village ----------
+// Le jeu commence en novembre 2026. Les mois suivent les saisons : la pluie tombe en décembre, le beau temps vient de janvier
+// à mars, la chaleur d'avril à juillet, la saison sèche d'août à novembre. Un mois du village dure 4 h de jeu.
+export const DEBUT_CALENDRIER = { mois: 10, annee: 2026 }; // novembre 2026 (mois 0 = janvier)
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+export function dateDuVillage(temps) {
+  const n = Math.floor((temps - DEBUT_PLUIE_MIN) / MOIS_MIN); // mois écoulés depuis la première pluie (décembre 2026)
+  const total = 11 + n; // décembre = mois 11 de l'année 2026
+  const mois = ((total % 12) + 12) % 12;
+  const annee = DEBUT_CALENDRIER.annee + Math.floor(total / 12);
+  return { mois, annee, texte: `${MOIS_COURTS[mois]} ${annee}` };
+}
+
 export const NOMS_SAISON = { pluie: 'Pluie', beau: 'Beau temps', chaleur: 'Chaleur', seche: 'Saison sèche' };
 
 export function saison(temps) {

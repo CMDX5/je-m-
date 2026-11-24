@@ -3,6 +3,8 @@
 
 const moyenne = (l, f) => (l.length ? Math.round(l.reduce((s, x) => s + f(x), 0) / l.length) : 0);
 
+import { dateDuVillage } from './saison.js';
+
 export function resumer(sim, penseur, erreursPage) {
   const H = sim.habitants;
   const actions = {};
@@ -10,7 +12,7 @@ export function resumer(sim, penseur, erreursPage) {
   const r = {
     version: 1,
     moment: sim.horodatage(),
-    saison: { nom: sim.etatSaison.nom, mois: sim.etatSaison.mois, chaleur: Math.round(sim.etatSaison.chaleur * 100) / 100, seche: Math.round(sim.etatSaison.seche * 100) / 100 },
+    saison: { date: dateDuVillage(sim.temps).texte, nom: sim.etatSaison.nom, mois: sim.etatSaison.mois, chaleur: Math.round(sim.etatSaison.chaleur * 100) / 100, seche: Math.round(sim.etatSaison.seche * 100) / 100 },
     population: { vivants: sim.habitants.length, defunts: sim.defunts.length, naissances: sim.stats.naissances || 0, deces: sim.stats.deces || 0, annee: sim.annee, nourrissons: sim.habitants.filter((v) => v.nourrisson).length, enceintes: sim.habitants.filter((v) => v.enceinte && !v.enceinte.accouche).length, prenomsAttendus: sim.naissancesEnAttente.length, causes: sim.defunts.slice(-6).map((d) => `${d.prenom} ${d.age} ans ${d.mort.cause}`) },
     penseur: penseur ? { mode: penseur.mode, modele: penseur.modele, fournisseur: penseur.fournisseurActuel || '', parFournisseur: penseur.parFournisseur || null, cles: penseur.cles ? Object.keys(penseur.cles).filter((f) => penseur.cles[f]) : [], ...penseur.stats, msMoyen: Math.round(penseur.stats.ms || 0), erreur: penseur.derniereErreur || '', technique: penseur.erreurTechnique || '', retires: penseur.retires || [], modeles: penseur.entrees ? penseur.entrees.map((e) => `${e.f}:${e.m}${e.principal ? '' : ' (secours)'}`) : [] } : null,
     stats: sim.stats,

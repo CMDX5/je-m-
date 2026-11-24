@@ -2,7 +2,7 @@
 // On vérifie les LOIS du monde (calendrier, effets physiques, faits perçus) ; ce que les habitants en font ne vient pas du jeu.
 import assert from 'node:assert/strict';
 import { Simulation } from '../src/sim/simulation.js';
-import { saison, DEBUT_PLUIE_MIN, PLUIE_MIN } from '../src/sim/saison.js';
+import { saison, dateDuVillage, DEBUT_PLUIE_MIN, PLUIE_MIN } from '../src/sim/saison.js';
 import { produire, risqueMaladie } from '../src/sim/monde.js';
 import { ANNEE_MIN, MOIS_MIN } from '../src/sim/vie.js';
 
@@ -30,6 +30,19 @@ assert.ok(saison(DEBUT_PLUIE_MIN + 239).intensitePluie < 0.1, 'et s\'arrête dou
 assert.equal(saison(DEBUT_PLUIE_MIN + 1000).intensitePluie, 0);
 assert.equal(saison(DEBUT_PLUIE_MIN + 100).resteDePluie, 140);
 assert.equal(saison(DEBUT_PLUIE_MIN + 1000).jusquaPluie, ANNEE_MIN - 1000);
+
+// ---- la date du village : on part de novembre 2026 ----
+assert.equal(dateDuVillage(6 * 60).texte, 'nov. 2026', 'au départ, nous sommes en novembre 2026');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN).texte, 'déc. 2026', 'la pluie tombe en décembre');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + MOIS_MIN).texte, 'janv. 2027', 'un mois du village = 4 h de jeu');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + 3 * MOIS_MIN).texte, 'mars 2027');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + 7 * MOIS_MIN).texte, 'juil. 2027');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + 8 * MOIS_MIN).texte, 'août 2027', 'la saison sèche commence en août');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + 11 * MOIS_MIN).texte, 'nov. 2027');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + ANNEE_MIN).texte, 'déc. 2027', 'une année du village = 2 jours : même mois, un an plus tard');
+assert.equal(dateDuVillage(DEBUT_PLUIE_MIN + 10 * ANNEE_MIN).texte, 'déc. 2036');
+const MOIS_PAR_SAISON = { pluie: ['déc.'], beau: ['janv.', 'févr.', 'mars'], chaleur: ['avr.', 'mai', 'juin', 'juil.'], seche: ['août', 'sept.', 'oct.', 'nov.'] };
+for (let t = 0; t < 5 * ANNEE_MIN; t += 30) assert.ok(MOIS_PAR_SAISON[saison(t).nom].includes(dateDuVillage(t).texte.split(' ')[0]), `le mois suit la saison à t=${t}`);
 
 // ---- la production : la terre rend le plus après la pluie, le moins à la fin de la saison sèche ----
 const monde = () => ({ poisson: 1, foret: 1, fertilite: 1, olives: 1, placesJetee: 4 });
@@ -95,6 +108,7 @@ const nourrir = (sim) => { for (const v of sim.habitants) if (!v.nourrisson) { v
   assert.match(sim.construirePrompt(5), /la pluie revient dans \d+ mois/);
   placer(sim, 0, 30);
   assert.match(sim.construirePrompt(5), /mois de la pluie/);
+  assert.match(sim.construirePrompt(5), /nous sommes en déc\. 2026/, 'les habitants savent quel mois on est');
 }
 
 // les changements de saison sont annoncés une fois chacun, deux années de suite

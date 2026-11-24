@@ -82,7 +82,7 @@ FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]
 Le village :
 - Marché : 150 ration(s) à vendre, 1 pièce(s) la ration ; remède : 5 pièces. Eau gratuite à la source.
 - Le conseil paie 1 pièce(s) par heure travaillée.
-- Le temps : une année dure ici deux jours (un mois, quatre heures).
+- Le temps : nous sommes en nov. 2026. Une année dure ici deux jours (un mois, quatre heures).
 - Saison : mois 12 sur 12 ; la pluie revient dans 1 mois.
 - Les habitants : Odeh (Youssef, Aïcha, Bassam, Mona) ; Qasem (Salim, Zeina, Sami, Jamal) ; Shahin (Adam, Dana, Suha) ; Zayed (Ibrahim, Samira, Mahmoud, Issa) ; Haddad (Tarek, Aya, Hani) ; Jaber (Lina, Ghada, Sara) ; Khoury (Nidal, Reem, Tala, Majd) ; Sabbagh (Ziad, Huda, Fadi) ; Farah (Omar, Siham, Layla, Widad) ; Awad (Rami, Rasha, Yazan, Elias) ; Saleh (Mounir, Jamila, Khalil) ; Mansour (Hassan, Amir, Dalia) ; Nasser (Nabil, Malak, Salma) ; Hamdan (Fares, Fatima, Walid, Haneen, Anas)
 
