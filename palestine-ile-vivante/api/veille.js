@@ -2,9 +2,7 @@
 // l'état au passage suivant (appel du serveur à lui-même, signé). Le premier passage est lancé quand la page s'en va
 // (api/etat.js) ; un appel sans signature démarre une chaîne si les conditions sont réunies (page fermée, veille armée).
 import { waitUntil } from '@vercel/functions';
-import { demarrerChaine, executerMaillon, signatureValide, dependances, DUREE_MAILLON_S } from './_village.js';
-
-export const config = { maxDuration: DUREE_MAILLON_S };
+import { demarrerChaine, executerMaillon, signatureValide, dependances } from './_village.js';
 
 async function travailler(corps, hote) {
   try {
