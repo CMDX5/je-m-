@@ -1,6 +1,18 @@
 {
   "buildCommand": "",
-  "installCommand": "",
   "outputDirectory": ".",
-  "functions": { "api/*.js": { "maxDuration": 60 } }
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60
+    },
+    "api/veille.js": {
+      "maxDuration": 300
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/veille",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

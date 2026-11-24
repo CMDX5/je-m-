@@ -12,6 +12,8 @@ import { Penseur } from './sim/penseur.js';
 import { PenseurClaude } from './sim/penseur-claude.js';
 import { PenseurGroq } from './sim/penseur-groq.js';
 import { demarrerRapports } from './sim/rapport.js';
+import { Relais, dureeFrancaise } from './sync.js';
+import { dateDuVillage } from './sim/saison.js';
 import { nomComplet, libelleMetier } from './sim/villager.js';
 import { PLAZA } from './world/layout.js';
 import { heightAt } from './world/heightmap.js';
@@ -29,6 +31,27 @@ function ecrireStockage(cle, val) {
 
 // laisser le message de chargement s'afficher avant le calcul des premiers jours
 await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+
+// ---------- Relais de nuit : le village a-t-il vécu pendant que la page était fermée ? ----------
+const relais = new Relais();
+let enRechargement = false; // pendant un rechargement voulu, on n'écrase pas la sauvegarde qu'on vient de poser
+let absence = null; // { de, deces, naissances, decisions } : l'état de la page avant que le village n'avance sans elle
+try { absence = JSON.parse(sessionStorage.getItem('ile-vivante:absence') || 'null'); sessionStorage.removeItem('ile-vivante:absence'); } catch { absence = null; }
+const veutNouvellePartie = new URLSearchParams(location.search).has('graine') || !!lireStockage(CLE_A_CHARGER);
+if (relais.actif && !veutNouvellePartie) {
+  const dist = await relais.prendre();
+  if (!dist.bloque && dist.existe && dist.etat) {
+    let tempsLocal = -1, stats0 = null;
+    const local = lireStockage(CLE_AUTO);
+    if (local) { try { const j = JSON.parse(local); tempsLocal = j.temps; stats0 = j.stats; } catch { /* sauvegarde locale illisible */ } }
+    const memePartie = !relais.partie || !dist.idPartie || relais.partie === dist.idPartie;
+    if (dist.temps > tempsLocal + 0.5 && (memePartie || tempsLocal < 0)) {
+      absence = { de: tempsLocal, deces: stats0?.deces || 0, naissances: stats0?.naissances || 0, decisions: stats0?.decisions || 0 };
+      ecrireStockage(CLE_AUTO, dist.etat);
+      relais.adopterPartie(dist.idPartie);
+    }
+  }
+}
 
 // ---------- Simulation ----------
 let sim;
@@ -48,8 +71,9 @@ if (params.has('graine')) {
   // l'adresse redevient normale : un rechargement reprendra cette nouvelle partie
   try { const u = new URL(location.href); u.searchParams.delete('graine'); history.replaceState(null, '', u); } catch { /* adresse figée */ }
 }
+if (veutNouvellePartie) relais.nouvellePartie(); // une autre partie : elle remplacera celle du serveur
 function sauverAuto() {
-  if (!sim.habitants.some((v) => v.nbDecisions > 0)) return;
+  if (enRechargement || !sim.habitants.some((v) => v.nbDecisions > 0)) return;
   ecrireStockage(CLE_AUTO, sim.serialiser());
 }
 setInterval(sauverAuto, 60000);
@@ -208,6 +232,98 @@ penseur.verifier();
 
 // En ligne (Vercel) : rapport régulier pour que Claude surveille la partie
 if (surGroq) demarrerRapports(sim, penseur);
+
+// ---------- Relais de nuit : départ, retour, reprise de main ----------
+const clesDuJoueur = () => (penseur.cles ? { groq: penseur.cles.groq || '', gemini: penseur.cles.gemini || '' } : null);
+const ecranVeille = document.getElementById('veille-plein');
+let heuresVeille = 10;
+let departMs = 0;
+let auRelais = false; // la page a confié le village au relais : elle ne le fait plus vivre
+
+function annoncerAbsence() {
+  if (!absence || absence.de < 0) return;
+  const min = sim.temps - absence.de;
+  if (min < 5) return;
+  const an = min / 2880, dn = Math.max(0, sim.stats.naissances - absence.naissances), dd = Math.max(0, sim.stats.deces - absence.deces), dec = Math.max(0, sim.stats.decisions - absence.decisions);
+  const texte = `Pendant votre absence, le village a vécu ${dureeFrancaise(min)} (${an.toFixed(1).replace('.', ',')} an${an >= 2 ? 's' : ''} du village) : ${dec} décisions des habitants, ${dn} naissance${dn > 1 ? 's' : ''}, ${dd} décès. Nous sommes en ${dateDuVillage(sim.temps).texte}.`;
+  sim.log(texte, 'conseil');
+  ui.toast(texte, 'conseil');
+}
+
+// Le relais a peut-être fait vivre le village : si oui, on recharge la page avec ce village-là.
+async function reprendreLaMain() {
+  const d = await relais.prendre();
+  if (d.bloque) { ui.toast('Une autre page tient déjà le village : fermez-la, puis rechargez celle-ci.', 'mal'); return false; }
+  if (d.existe && d.etat && d.temps > sim.temps + 0.5) {
+    try { sessionStorage.setItem('ile-vivante:absence', JSON.stringify({ de: sim.temps, deces: sim.stats.deces, naissances: sim.stats.naissances, decisions: sim.stats.decisions })); } catch { /* tant pis pour le résumé */ }
+    enRechargement = true;
+    ecrireStockage(CLE_AUTO, d.etat);
+    relais.adopterPartie(d.idPartie);
+    location.reload();
+    return true;
+  }
+  auRelais = false;
+  if (ecranVeille) ecranVeille.hidden = true;
+  return true;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!relais.actif || relais.bloque) return;
+  if (document.visibilityState === 'hidden') {
+    departMs = Date.now();
+    if (!auRelais && sim.habitants.some((v) => v.nbDecisions > 0)) relais.deposer(sim, { liberer: true, cles: clesDuJoueur(), heures: heuresVeille, keepalive: true });
+    auRelais = relais.veille; // le relais peut prendre le village : au retour, on le reprend
+  } else if (departMs && Date.now() - departMs > 3000) {
+    departMs = 0;
+    reprendreLaMain();
+  }
+});
+// la page ouverte garde la main et sauvegarde le village sur le serveur toutes les 30 minutes (au cas où le téléphone la ferme)
+setInterval(() => {
+  if (!relais.actif || relais.bloque || auRelais || document.visibilityState !== 'visible' || !sim.habitants.some((v) => v.nbDecisions > 0)) return;
+  relais.deposer(sim, { liberer: false, cles: clesDuJoueur(), heures: heuresVeille });
+}, 30 * 60 * 1000);
+
+Object.assign(ui.actions, {
+  relais: {
+    // activer : enregistrer le code et confier les clés au serveur (stockage privé du projet)
+    async activer(code, heures = 10) {
+      const cles = clesDuJoueur();
+      if (!cles || (!cles.groq && !cles.gemini)) return { ok: false, message: 'Ajoutez d’abord une clé Groq ou Gemini : le relais en a besoin pour faire penser les habitants.' };
+      relais.definirCode(code);
+      const d = await relais.prendre({ force: true });
+      if (d.statut === 403) { relais.definirCode(''); return { ok: false, message: 'Code du village incorrect. Si vous en avez déjà créé un, utilisez le même.' }; }
+      if (d.statut !== 200) { relais.definirCode(''); return { ok: false, message: 'Le stockage du village ne répond pas pour le moment. Réessayez dans un instant.' }; }
+      relais.definirVeille(true);
+      heuresVeille = heures;
+      if (!relais.partie) relais.nouvellePartie();
+      const r = await relais.deposer(sim, { liberer: false, cles, heures });
+      if (r.status !== 200) { relais.definirVeille(false); return { ok: false, message: 'Impossible d’enregistrer le village sur le serveur. Réessayez.' }; }
+      await relais.rafraichir(0);
+      return { ok: true, message: `Relais activé : quand vous quitterez cette page, le village continuera jusqu’à ${heures} h.` };
+    },
+    // partir maintenant : le village passe au relais, cette page s'arrête
+    async partir() {
+      if (!relais.actif || !relais.veille) return { ok: false, message: 'Activez d’abord le relais.' };
+      const r = await relais.deposer(sim, { liberer: true, cles: clesDuJoueur(), heures: heuresVeille });
+      if (r.status !== 200) return { ok: false, message: 'Impossible de confier le village au serveur. Réessayez.' };
+      auRelais = true;
+      changerVitesse(0);
+      if (ecranVeille) ecranVeille.hidden = false;
+      return { ok: true, message: 'Le village continue sans vous.' };
+    },
+    async eteindre() {
+      const r = await relais.reglages({ veille: false, effacerCles: true });
+      relais.definirVeille(false);
+      return r.status === 200 ? { ok: true, message: 'Relais éteint, vos clés sont effacées du serveur.' } : { ok: false, message: 'Le serveur ne répond pas : vos clés y restent jusqu’au prochain essai.' };
+    },
+    reprendre: reprendreLaMain,
+  },
+});
+document.getElementById('reprendre-main')?.addEventListener('click', async () => { await reprendreLaMain(); if (!enRechargement) changerVitesse(vitesseAvantPause || 4); });
+if (relais.bloque) ui.toast('Le village est tenu par une autre page : celle-ci ne se synchronise pas avec le relais.', 'mal');
+annoncerAbsence();
+ui.relais = relais;
 
 window.__ile = { sim, ui, camera, controls, penseur, select: (id) => ui.actions.selectionner(id, true) , habitants3d };
 

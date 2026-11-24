@@ -6,6 +6,7 @@ import { METIERS, METIERS_ADULTES, PROJETS, NOMS_OBJETS } from '../sim/data.js';
 import { nomComplet, libelleMetier } from '../sim/villager.js';
 import { moisDepuis, depuis } from '../sim/vie.js';
 import { NOMS_SAISON, dateDuVillage } from '../sim/saison.js';
+import { dureeFrancaise as dureeFrancaiseUI } from '../sync.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Une clé Google commence par « AIza » ; sinon, c'est une clé Groq.
@@ -270,7 +271,37 @@ export class Interface {
     } else if (p) {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Fournisseur : <b>${esc(p.fournisseur)}</b> (${esc(p.modele)}) · ${p.stats.ok} pensées reçues, ${p.stats.echecs} échecs · ${(p.stats.ms / 1000).toFixed(1)} s en moyenne · ${p.actifs} en cours.` : 'Aucun modèle connecté.'}</p>`;
     }
+    out += this.carteRelais();
     out += `<h3>Partie</h3><div class="boutons"><button class="btn" data-action="sauver">Sauvegarder</button><button class="btn" data-action="charger">Charger</button><button class="btn danger" data-action="recommencer">Nouvelle île</button></div>`;
+    return out;
+  }
+
+  // ---------- Relais de nuit ----------
+  carteRelais() {
+    const r = this.relais;
+    if (!r || !this.penseur || this.penseur.mode !== 'groq') return '';
+    let out = '<h3>Relais de nuit</h3>';
+    if (!r.actif) {
+      return out + `<p class="note">Pour que le village continue de vivre pendant que vous dormez ou que vous fermez la page, un serveur gratuit prend le relais avec <b>vos</b> clés Groq / Gemini. Elles sont gardées dans le stockage privé de votre projet Vercel, uniquement pour faire penser les habitants, et vous pouvez les effacer à tout moment. Le village avance tant que les modèles gratuits répondent ; il s'arrête quand leurs quotas du jour sont épuisés.</p>
+        <form data-form="relais-code" class="boutons"><small>Choisissez un code (8 caractères au moins) : il protège votre village des autres visiteurs du site. Gardez-le, il sert à retrouver votre village.</small>
+        <input name="code" type="password" minlength="8" autocomplete="new-password" placeholder="Code du village" aria-label="Code du village">
+        <select name="heures" aria-label="Durée du relais"><option value="6">6 h</option><option value="10" selected>10 h</option><option value="14">14 h</option></select>
+        <button class="btn principal" type="submit">Activer</button></form>`;
+    }
+    // état connu du serveur (rafraîchi au plus toutes les 30 s)
+    if (!this._relaisRafraichi || Date.now() - this._relaisRafraichi > 30000) {
+      this._relaisRafraichi = Date.now();
+      r.rafraichir(0).then(() => { if (this.onglet === 'village') this.rendreContenu(true); });
+    }
+    const s = r.statut, maintenant = Date.now();
+    const il = (ms) => { const m = Math.max(0, Math.round((maintenant - ms) / 60000)); return m < 1 ? 'à l’instant' : m < 90 ? `il y a ${m} min` : `il y a ${Math.round(m / 60)} h`; };
+    out += `<p class="note">${r.veille ? `<span class="pos">Relais armé</span> : quand vous quitterez la page, le village continuera ${s?.veilleJusqua && s.veilleJusqua > maintenant ? `jusqu'à ${new Date(s.veilleJusqua).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : `pendant ${this.heuresVeille || 10} h`}.` : '<span class="neg">Relais éteint</span> : le village s\'arrête quand vous fermez la page.'}${s?.cles ? ` Clés confiées : ${[s.cles.groq && 'Groq', s.cles.gemini && 'Gemini'].filter(Boolean).join(' + ') || 'aucune'}.` : ''}</p>`;
+    if (s?.relais?.dernier) {
+      const x = s.relais;
+      out += `<p class="note">Dernier passage du relais ${il(x.dernier)} : ${x.raison ? esc(x.raison) : `${dureeFrancaiseUI(x.minutesJeu || 0)} de jeu, ${x.decisions ?? 0} décisions${x.deces ? `, ${x.deces} décès` : ''}${x.naissances ? `, ${x.naissances} naissance(s)` : ''}${x.arret === 'quotas' ? ' (arrêté : quotas gratuits épuisés)' : ''}`}. Au total : ${dureeFrancaiseUI(x.minutesJeuTotal || 0)} de jeu hors de la page.</p>`;
+    } else if (r.veille) out += '<p class="note">Le relais n\'est pas encore passé. Il se déclenche environ toutes les 15 minutes, une fois la page quittée.</p>';
+    out += `<div class="boutons"><button class="btn principal" data-action="relais-partir" ${r.veille ? '' : 'disabled'}>Laisser vivre sans moi</button>
+      <button class="btn danger" data-action="relais-eteindre">Éteindre et effacer mes clés</button></div>`;
     return out;
   }
 
@@ -423,6 +454,8 @@ export class Interface {
     else if (t.dataset.action === 'sauver') this.actions.sauvegarder();
     else if (t.dataset.action === 'charger') this.actions.charger();
     else if (t.dataset.action === 'recommencer') this.actions.recommencer();
+    else if (t.dataset.action === 'relais-partir') this.actions.relais.partir().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this.rendreContenu(true); });
+    else if (t.dataset.action === 'relais-eteindre') this.actions.relais.eteindre().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
     else if (t.dataset.action === 'oublier-cle') this.penseur?.oublierCle?.(t.dataset.fournisseur);
     this.rendreContenu(true);
     this.rendreFiche(true);
@@ -442,6 +475,12 @@ export class Interface {
     } else if (f.dataset.form === 'annonce') {
       const t = String(d.get('texte') || '').trim();
       if (t) { s.annoncer(t); this.toast('Annonce faite. Chacun l\'entendra à sa prochaine décision.', 'conseil'); }
+    } else if (f.dataset.form === 'relais-code') {
+      const code = String(d.get('code') || '').trim();
+      if (code.length < 8) { this.toast('Le code du village doit avoir au moins 8 caractères.', 'mal'); return; }
+      this.heuresVeille = Number(d.get('heures')) || 10;
+      this.toast('Activation du relais…', 'conseil');
+      this.actions.relais.activer(code, this.heuresVeille).then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
     } else if (f.dataset.form === 'cle') {
       const v = String(d.get('cle') || '').trim();
       const four = f.dataset.fournisseur;

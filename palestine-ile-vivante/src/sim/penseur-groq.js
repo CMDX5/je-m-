@@ -65,11 +65,22 @@ function trierGemini(liste) {
   });
 }
 
+// Comment le penseur joint les fournisseurs. Par défaut : les points d'accès du site (api/modeles, api/pensee), depuis la page.
+// Le relais de nuit en fournit un autre : appels directs depuis le serveur, avec les clés enregistrées.
+export const transportNavigateur = {
+  modeles: (f, cle) => fetch('api/modeles', { headers: { 'x-fournisseur': f, 'x-cle': cle } }),
+  pensee: (f, cle, corps) => fetch('api/pensee', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-fournisseur': f, 'x-cle': cle }, body: JSON.stringify(corps),
+  }),
+};
+
 export class PenseurGroq {
-  constructor(sim) {
+  constructor(sim, { transport = transportNavigateur, cles = null, horloge = () => performance.now() } = {}) {
+    this.transport = transport;
+    this.horloge = horloge; // en millisecondes ; injectable pour le relais de nuit et les tests
     this.sim = sim;
     this.mode = 'groq';
-    this.cles = Object.fromEntries(ORDRE.map((f) => [f, lire(FOURNISSEURS[f].cle) || '']));
+    this.cles = Object.fromEntries(ORDRE.map((f) => [f, cles ? String(cles[f] || '') : lire(FOURNISSEURS[f].cle) || '']));
     this.modele = lire(`${FOURNISSEURS.groq.cle}:modele`) || '';
     this.fournisseurActuel = 'groq';
     this.disponible = false;
@@ -109,7 +120,7 @@ export class PenseurGroq {
     if (!cle) return [];
     const nom = FOURNISSEURS[f].nom;
     try {
-      const r = await fetch('api/modeles', { headers: { 'x-fournisseur': f, 'x-cle': cle } });
+      const r = await this.transport.modeles(f, cle);
       const d = await r.json().catch(() => ({}));
       if (r.status === 401) { this.erreurs[f] = `${nom} refuse cette clé. Vérifiez-la ou créez-en une nouvelle.`; this.oublierCle(f, false); return []; }
       if (!r.ok) { this.erreurs[f] = d.erreur || `${nom} injoignable pour le moment.`; return []; }
@@ -179,7 +190,7 @@ export class PenseurGroq {
   }
 
   tick() {
-    const maintenant = performance.now();
+    const maintenant = this.horloge();
     if (!this.disponible || this.actifs >= MAX_PARALLELE || maintenant - this.dernierEnvoi < ECART_MIN_MS) return;
     const e = this.choisir(maintenant);
     if (!e) return;
@@ -200,7 +211,7 @@ export class PenseurGroq {
 
   pauser(e, ms) {
     const k = `${e.f}|${e.m}`;
-    this.pauses.set(k, Math.max(this.pauses.get(k) || 0, performance.now() + ms));
+    this.pauses.set(k, Math.max(this.pauses.get(k) || 0, this.horloge() + ms));
   }
 
   // N'envoie le groupe suivant vers ce modèle que lorsqu'il a de quoi le traiter (évite les refus).
@@ -219,16 +230,13 @@ export class PenseurGroq {
     const k = `${e.f}|${e.m}`;
     this.occupes.add(k);
     this.groupe = ids;
-    this.dernierEnvoi = performance.now();
+    this.dernierEnvoi = this.horloge();
     this.stats.appels++;
     this.modele = e.m;
     this.fournisseurActuel = e.f;
-    const t0 = performance.now();
+    const t0 = this.horloge();
     try {
-      const r = await fetch('api/pensee', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-fournisseur': e.f, 'x-cle': this.cles[e.f] },
-        body: JSON.stringify({ prompt, modele: e.m }),
-      });
+      const r = await this.transport.pensee(e.f, this.cles[e.f], { prompt, modele: e.m });
       const d = await r.json().catch(() => ({}));
       if (r.status === 429) throw Object.assign(new Error('limite'), { attente: d.attente || 20, quota: d.quota });
       if (r.status === 401) { this.oublierCle(e.f, false); throw new Error(`${FOURNISSEURS[e.f].nom} refuse la clé enregistrée. Saisissez-en une nouvelle.`); }
@@ -251,7 +259,7 @@ export class PenseurGroq {
       this.stats.echecs += ids.length - n;
       this.parFournisseur[e.f] += n;
       this.derniereErreur = '';
-      const ms = performance.now() - t0;
+      const ms = this.horloge() - t0;
       this.stats.ms = this.stats.ms ? this.stats.ms * 0.7 + ms * 0.3 : ms;
     } catch (err) {
       // le modèle n'a rien dit : ces habitants n'ont pas pensé, ils attendent le prochain modèle
@@ -264,8 +272,8 @@ export class PenseurGroq {
         this.reussitesDeSuite = 0;
         // longue attente = quota du jour épuisé pour ce modèle : les groupes suivants iront vers un autre modèle
         this.pauser(e, Math.min(err.attente, 6 * 3600) * 1000);
-        const reprise = this.pauseJusqua - performance.now();
-        const aucunLibre = !this.entrees.some((x) => performance.now() >= (this.pauses.get(`${x.f}|${x.m}`) || 0));
+        const reprise = this.pauseJusqua - this.horloge();
+        const aucunLibre = !this.entrees.some((x) => this.horloge() >= (this.pauses.get(`${x.f}|${x.m}`) || 0));
         this.derniereErreur = aucunLibre && reprise > 15000
           ? err.surcharge && reprise <= 120000 ? 'Les modèles gratuits sont très demandés en ce moment : les habitants reprennent dans un instant.' : `Limites gratuites atteintes : les habitants reprennent dans ${reprise > 120000 ? `${Math.ceil(reprise / 60000)} min` : `${Math.ceil(reprise / 1000)} s`}.${this.aCle('gemini') ? '' : ' Ajoutez une clé Gemini (onglet Village) pour continuer.'}`
           : '';
