@@ -112,6 +112,10 @@ export function creerTerrain(scene, batiments) {
 
 // ---------- Végétation ----------
 
+// Matières végétales qui verdissent après la pluie et jaunissent à la saison sèche (voir Environment.appliquerSaison)
+export const saisonnier = [];
+const verte = (opts) => { const m = new THREE.MeshStandardMaterial(opts); saisonnier.push({ mat: m, base: m.color.clone() }); return m; };
+
 function instancer(scene, geo, mat, matrices, { ombre = true } = {}) {
   const m = new THREE.InstancedMesh(geo, mat, matrices.length);
   matrices.forEach((mx, i) => m.setMatrixAt(i, mx));
@@ -159,7 +163,7 @@ export function creerVegetation(scene, nav) {
   }
   const tronc = new THREE.MeshStandardMaterial({ color: 0x6a5a48, roughness: 1 });
   instancer(scene, new THREE.CylinderGeometry(0.22, 0.38, 1.8, 6), tronc, mxs);
-  const feuillageOlive = new THREE.MeshStandardMaterial({ color: 0x8a9a6a, roughness: 0.9, flatShading: true });
+  const feuillageOlive = verte({ color: 0x8a9a6a, roughness: 0.9, flatShading: true });
   const geoCouronne = new THREE.IcosahedronGeometry(1.7, 1);
   instancer(scene, geoCouronne, feuillageOlive, mxc);
 
@@ -180,7 +184,7 @@ export function creerVegetation(scene, nav) {
     pc.push(m4.compose(p.set(x, y + 4.9 * k, z), q, s.set(k * 1.2, k * 0.75, k * 1.2)).clone());
   }
   instancer(scene, new THREE.CylinderGeometry(0.2, 0.32, 4.4, 5), tronc, pt);
-  instancer(scene, new THREE.DodecahedronGeometry(2.2, 0), new THREE.MeshStandardMaterial({ color: 0x4f6b3a, roughness: 0.95, flatShading: true }), pc);
+  instancer(scene, new THREE.DodecahedronGeometry(2.2, 0), verte({ color: 0x4f6b3a, roughness: 0.95, flatShading: true }), pc);
 
   // Cyprès autour de la mosquée et le long des chemins
   const cypres = [[-25, -12], [-25, -6], [-25, 0], [-7, -13], [-3, -13], [34, -12], [38, 18], [-20, 40], [12, 56], [-4, 58], [20, 60]];
@@ -202,7 +206,7 @@ export function creerVegetation(scene, nav) {
       sabra.push(m4.compose(p.set(xx, heightAt(xx, zz) + rng.range(0.4, 1.3), zz), q, s.set(0.55, 0.75, 0.16)).clone());
     }
   }
-  instancer(scene, new THREE.SphereGeometry(1, 7, 5), new THREE.MeshStandardMaterial({ color: 0x6f8a45, roughness: 0.8, flatShading: true }), sabra);
+  instancer(scene, new THREE.SphereGeometry(1, 7, 5), verte({ color: 0x6f8a45, roughness: 0.8, flatShading: true }), sabra);
 
   // Rochers
   const roc = [];
@@ -226,5 +230,5 @@ export function creerVegetation(scene, nav) {
       plants.push(m4.compose(p.set(x + 0.3, heightAt(x, z) + 0.25, z), q.identity(), s.set(0.5, 0.5, 0.5)).clone());
     }
   }
-  instancer(scene, new THREE.IcosahedronGeometry(0.7, 0), new THREE.MeshStandardMaterial({ color: 0x5f8a34, flatShading: true }), plants, { ombre: false });
+  instancer(scene, new THREE.IcosahedronGeometry(0.7, 0), verte({ color: 0x5f8a34, flatShading: true }), plants, { ombre: false });
 }

@@ -15,23 +15,61 @@ import { PRENOMS_H, PRENOMS_F, NOMS_FAMILLE, METIERS, METIERS_ADULTES, PROJETS, 
 import { creerHabitant, nomComplet, libelleMetier, noter, retenir } from './villager.js';
 import { ACTIONS } from './prompts.js';
 import { construirePrompt } from './perception.js';
+import { saison } from './saison.js';
+import { depuis } from './vie.js';
+import { ANNEE_MIN, MOIS_MIN, GROSSESSE_MOIS, AGE_NOURRISSON, AGE_ADULTE, AGE_FECOND_MAX, DELAI_PRENOM_MIN, VALIDITE_SOUHAIT_MIN, risqueDecesHoraire, causeDeces, ageEnAns } from './vie.js';
 import { creerMonde, regenerer, produire, recuperation, risqueMaladie, pressionCircadienne, confortFoyer, lumiere } from './monde.js';
 import { NavGrid } from './navigation.js';
 import { buildLayout, makeBuilding, ZONES, randomPointInZone, FREE_HOUSE_SPOTS, PLAZA } from '../world/layout.js';
 
 const MIN_JOUR = 1440;
+const CAPACITE_MARCHE = 600; // rations que l'entrepôt du marché peut garder
 const VITESSE_MARCHE = 1.45;
 const RENDU = {
   dormir: 'dormir', manger: 'manger', boire: 'manger', travailler: 'travailler', aller: 'flaner', parler: 'socialiser',
-  donner: 'aider', prendre: 'socialiser', acheter: 'socialiser', se_soigner: 'soigner', prier: 'prier', se_reposer: 'rester',
-  flaner: 'flaner', etudier: 'ecole', jouer: 'jouer', puiser_eau: 'travailler', emmenager: 'rester', rien: 'rester',
+  donner: 'aider', demander: 'socialiser', prendre: 'socialiser', acheter: 'socialiser', se_soigner: 'soigner', prier: 'prier', se_reposer: 'rester',
+  flaner: 'flaner', etudier: 'ecole', jouer: 'jouer', puiser_eau: 'travailler', emmenager: 'rester', rien: 'rester', avoir_un_enfant: 'socialiser',
 };
 const ETAT = {
   dormir: 'Dort', manger: 'Mange', boire: 'Boit', travailler: 'Travaille', aller: 'Se rend quelque part', parler: 'Parle à quelqu’un',
-  donner: 'Donne quelque chose', prendre: 'Prend quelque chose', acheter: 'Achète au marché', se_soigner: 'Se fait soigner', prier: 'Prie',
-  se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend',
+  donner: 'Donne quelque chose', demander: 'Demande quelque chose', prendre: 'Prend quelque chose', acheter: 'Achète au marché', se_soigner: 'Se fait soigner', prier: 'Prie',
+  se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend', avoir_un_enfant: 'Parle à quelqu’un',
 };
 const TON = { chaleureux: 'd’un ton chaleureux', tendu: 'd’un ton tendu', colere: 'avec colère', triste: 'd’un ton triste', joyeux: 'd’un ton joyeux' };
+// Les mots de l'habitant pour un objet (« une ration », « du pain », « médicaments »…) → l'objet du monde.
+function nomObjet(mot) {
+  // « du pain », « des remèdes », « une ration », « de l'eau » : on enlève l'article avant de reconnaître l'objet
+  const t = sansAccent(String(mot ?? '')).replace(/[’]/g, "'").replace(/^(?:\d+\s+|(?:de la|de l'|une|un|les|des|du|de|le|la|d'|l')(?:\s+|(?<=')))+/, '').trim();
+  if (!t || t === 'rien') return null;
+  if (/^(nourriture|ration|repas|pain|poisson|olive|vivre|aliment|manger|legume|fruit|farine|ble)/.test(t) || /ration/.test(t)) return 'nourriture';
+  if (/^(remede|medic|soin|plante|potion)/.test(t)) return 'remedes';
+  if (/^(eau|cruche|jarre d.eau|boisson)/.test(t)) return 'eau';
+  if (/^(piece|argent|sou|monnaie|pieces)/.test(t)) return 'pieces';
+  if (/^(huile)/.test(t)) return 'huile';
+  return null;
+}
+
+// Tri d'AFFICHAGE pour le journal (ne change rien à ce que vit ou pense l'habitant) :
+// on y met les pensées et paroles qui parlent des autres, de soi, de ce qu'on ressent ou qu'on se demande,
+// et on laisse dans l'onglet Paroles les phrases de simple routine (« j'ai soif, je vais boire »).
+const MOTS_INTIMES = /(je (me )?(sens|demande|crois|pense que|regrette|crains|souviens|voudrais|reve|doute|comprends|sais pas|ne sais)|j'(aime|ai peur|espere|ai honte|en ai assez|ai l'impression|aurais)|pourquoi|peur|honte|fier|fiere|triste|heureu|colere|seul|seule|injust|confiance|merite|mensonge|menti|pardon|manque|souvenir|vie|avenir|famille|enfants?|mere|pere|mari|femme|ami|aime|coeur|dieu|priere|conseil|reve|espoir|inquiet|inquiete|jaloux|jalouse|rancune|merci)/;
+function penseePersonnelle(texte, habitants, v, ton = '') {
+  const t = sansAccent(String(texte || '')).replace(/’/g, "'");
+  if (t.length < 25) return false;
+  if (ton && !['calme', 'neutre', ''].includes(sansAccent(ton))) return true;
+  if (t.includes('?') || t.length > 160) return true;
+  if (habitants.some((o) => o !== v && t.includes(sansAccent(o.prenom).toLowerCase()))) return true;
+  return MOTS_INTIMES.test(t);
+}
+
+// le ton choisi par l'habitant, rendu en français ; un ton inconnu est repris tel quel
+const commentDit = (ton) => (!ton || ton === 'calme' ? '' : ` ${TON[sansAccent(ton)] || `d’un ton ${ton}`}`);
+// un prénom donné par un parent : des lettres, 2 à 16 caractères, une majuscule
+function nettoyerPrenom(brut) {
+  const t = String(brut ?? '').trim().split(/\s+/)[0] || '';
+  if (!/^[\p{L}][\p{L}'’-]{1,15}$/u.test(t)) return '';
+  return t.charAt(0).toLocaleUpperCase('fr') + t.slice(1);
+}
 const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 export class Simulation {
@@ -42,6 +80,11 @@ export class Simulation {
     this.listeners = {};
     this.journal = [];
     this.flux = []; // paroles et pensées, pour l'interface
+    this.tous = []; // tous les habitants, vivants ou non, rangés par numéro
+    this.defunts = [];
+    this.souhaits = []; // « j'aimerais un enfant avec toi », en attente d'une réponse
+    this.naissancesEnAttente = []; // enfants nés qui attendent un prénom de leurs parents
+    this.interieur = []; // vie intérieure : ce que chacun retient, pense des autres, dit de lui-même, comprend
     this.requetes = [];
     this.nextRequete = 1;
     this.res = { nourriture: 150, huile: 20, pierre: 55, bois: 40, pieces: 800, remedes: 18 };
@@ -51,12 +94,14 @@ export class Simulation {
     this.dettes = [];
     this.monde = creerMonde();
     this.foyers = {};
-    this.bonus = { jetee: false, puits: false, ecole: false };
+    this.bonus = { jetee: false, puits: false, ecole: false, halle: false };
     this.projet = null;
     this.meteo = { tempete: 0, secheresse: 0, bonnePeche: 0 };
+    this.etatSaison = saison(this.temps); // pluie, beau temps, chaleur, saison sèche : fonction du temps
+    this.saisonNom = this.etatSaison.nom;
     this.navire = 0;
     this.historique = [];
-    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, salaires: 0 };
+    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, demandes: 0, salaires: 0, salairesVeille: 0, naissances: 0, deces: 0 };
     this.derniereHeure = Math.floor(this.temps / 60);
     this.cacheRoster = null;
     this.cacheMembres = null;
@@ -78,13 +123,23 @@ export class Simulation {
     const h = Math.floor(this.heure(t)), m = Math.floor(((t % 60) + 60) % 60);
     return `Jour ${Math.floor(t / MIN_JOUR) + 1}, ${h}h${String(m).padStart(2, '0')}`;
   }
-  habitant(id) { return this.habitants[id]; }
+  habitant(id) { return this.tous[id]; }
+  vivant(id) { const v = this.tous[id]; return v && !v.mort ? v : undefined; }
+  get annee() { return Math.floor(this.temps / ANNEE_MIN) + 1; }
   batiment(id) { return this.batimentsParId[id]; }
   meteoTexte() {
-    if (this.meteo.tempete > this.temps) return 'Une tempête secoue la mer.';
-    if (this.meteo.secheresse > this.temps) return 'Vague de chaleur, les champs souffrent.';
-    if (this.meteo.bonnePeche > this.temps) return 'Des bancs de sardines longent la côte.';
-    return 'Le temps est calme.';
+    const E = this.etatSaison;
+    const parts = [{
+      pluie: 'Il pleut.',
+      beau: 'Beau temps : le ciel est dégagé, l’air est doux et la terre est verte.',
+      chaleur: E.chaleur > 0.8 ? 'Il fait très chaud et la terre est sèche.' : 'Il fait chaud et la terre sèche.',
+      seche: 'C’est la saison sèche : la terre est craquelée et la chaleur pèse.',
+    }[E.nom]];
+    if (E.nom === 'chaleur' || E.nom === 'seche') parts.push(`La pluie est tombée pour la dernière fois ${depuis(this.temps - E.depuisPluie, this.temps)}.`);
+    if (this.meteo.tempete > this.temps) parts.push('Une tempête secoue la mer.');
+    else if (this.meteo.secheresse > this.temps) parts.push('Vague de chaleur, les champs souffrent.');
+    else if (this.meteo.bonnePeche > this.temps) parts.push('Des bancs de sardines longent la côte.');
+    return parts.join(' ');
   }
   occupants(f) {
     if (!this.cacheMembres) {
@@ -141,6 +196,7 @@ export class Simulation {
       return rng.pick(pool);
     };
     this.habitants = [];
+    this.tous = [];
     let id = 0;
     const familles = rng.shuffle([...NOMS_FAMILLE]);
     maisons.forEach((m, i) => {
@@ -152,17 +208,23 @@ export class Simulation {
         const v = creerHabitant({ id: id++, prenom: prenom(genre), nom, genre, age, foyer: m.id, rng });
         this.habitants.push(v);
         membres.push(v);
+        return v;
       };
+      let couple = null;
+      const enfantDuCouple = (v) => { if (couple && v.age <= couple[1].age - 16) v.parents = [couple[0].id, couple[1].id]; };
       for (const role of rng.pick(modeles[tailles[i]])) {
-        if (role === 'couple') { const a = rng.int(26, 56); ajouter('H', a); ajouter('F', clamp(a + rng.int(-6, 3), 22, 60)); }
+        if (role === 'couple') { const a = rng.int(26, 56); const h = ajouter('H', a); const f = ajouter('F', clamp(a + rng.int(-6, 3), 22, 60)); h.conjoint = f.id; f.conjoint = h.id; couple = [h, f]; }
         else if (role === 'adulte') ajouter(rng.chance(0.5) ? 'F' : 'H', rng.int(30, 50));
-        else if (role === 'jeune') ajouter(rng.chance(0.5) ? 'F' : 'H', rng.int(17, 25));
-        else if (role === 'enfant') ajouter(rng.chance(0.5) ? 'F' : 'H', rng.int(3, 15));
+        else if (role === 'jeune') enfantDuCouple(ajouter(rng.chance(0.5) ? 'F' : 'H', rng.int(17, 25)));
+        else if (role === 'enfant') enfantDuCouple(ajouter(rng.chance(0.5) ? 'F' : 'H', rng.int(3, 15)));
         else if (role === 'ancien') ajouter(rng.chance(0.55) ? 'F' : 'H', rng.int(64, 82));
       }
       for (const v of membres) v.famille = membres.filter((o) => o !== v).map((o) => o.id);
       this.foyers[m.id] = { nourriture: membres.length * 5, eau: membres.length * 4, pertes: [] };
     });
+    // chacun est né il y a `age` années du village (une année = 2 jours), à une date de l'année qui lui est propre
+    for (const v of this.habitants) v.naissance = this.temps - (v.age + rng.range(0, 0.99)) * ANNEE_MIN;
+    this.tous = [...this.habitants];
   }
 
   // Les métiers sont confiés au départ (c'est autorisé : ce n'est pas de la pensée).
@@ -174,6 +236,221 @@ export class Simulation {
     let k = 0;
     for (const v of adultes) v.metier = v === imam ? 'imam' : ordre[k++ % ordre.length];
     for (const v of this.habitants) if (!v.metier) v.metier = this.categorie(v);
+  }
+
+
+  // ---------- Cycle de vie (lois du monde) ----------
+  // Chaque heure de jeu : les années passent, les corps vieillissent, certains s'éteignent, les grossesses avancent.
+  cycleDeVie() {
+    const t = this.temps;
+    for (const v of [...this.habitants]) {
+      const age = ageEnAns(v, t);
+      if (age > v.age) { v.age = age; this.anniversaire(v); }
+      if (v.nourrisson && v.age >= AGE_NOURRISSON) this.grandir(v);
+    }
+    for (const v of [...this.habitants]) {
+      if (v.mort) continue;
+      if ((v.agonie || 0) >= 120 || this.rng.chance(risqueDecesHoraire(v))) this.mourir(v, causeDeces(v));
+    }
+    // une maladie guérit en général d'elle-même au bout d'un jour ou deux (le dispensaire et les remèdes l'accélèrent)
+    for (const v of this.habitants) {
+      if (v.malade && v.besoins.sante > 15 && this.rng.chance(0.04)) {
+        v.malade = false;
+        noter(v, this.temps, 'Ta fièvre est tombée : tu n\'es plus malade.');
+      }
+    }
+    for (const m of [...this.habitants]) if (m.enceinte && !m.enceinte.accouche && t >= m.enceinte.terme) this.accoucher(m);
+    this.souhaits = this.souhaits.filter((x) => t - x.t < VALIDITE_SOUHAIT_MIN);
+    for (const n of [...this.naissancesEnAttente]) if (t - n.t >= DELAI_PRENOM_MIN) this.creerNouveauNe(n, this.prenomLibre(n.sexe), true);
+  }
+
+  anniversaire(v) {
+    noter(v, this.temps, `Tu as maintenant ${v.age} an${v.age > 1 ? 's' : ''}.`);
+    if (v.metier === 'enfant' && v.age >= 6 && v.age < AGE_ADULTE) { v.metier = 'eleve'; this.log(`${nomComplet(v)} entre à l'école.`, 'info', [v.id]); }
+    else if ((v.metier === 'enfant' || v.metier === 'eleve') && v.age >= AGE_ADULTE) {
+      v.metier = 'sansmetier';
+      noter(v, this.temps, 'Tu es adulte : le conseil peut te confier un métier.');
+      this.log(`${nomComplet(v)} devient adulte et n'a pas encore de métier.`, 'info', [v.id]);
+    }
+  }
+
+  // Un fait important arrive : l'habitant s'arrête et décide à nouveau, en priorité.
+  alerter(o) {
+    if (!o || o.mort || o.nourrisson) return;
+    if (o.statut === 'agit') { o.path = null; if (o.conversation) this.quitterConversation(o); this.attendre(o); }
+    else if (o.statut === 'reflechit') o.reparler = true;
+    o.priorite = true;
+  }
+
+  mourir(v, cause) {
+    if (v.mort) return;
+    const F = v.genre === 'F';
+    v.mort = { t: this.temps, cause, jour: this.jour };
+    if (v.conversation) this.quitterConversation(v);
+    v.path = null; v.activite = null; v.conversation = null; v.statut = 'agit'; v.priorite = false;
+    this.habitants = this.habitants.filter((o) => o !== v);
+    this.defunts.push(v);
+    this.cacheMembres = null; this.cacheRoster = null;
+    this.stats.deces++;
+    // ce qu'il laisse : l'argent à un proche (sinon à la caisse), les provisions à la maison ; ses dettes s'éteignent
+    const proches = v.famille.map((id) => this.habitant(id)).filter((o) => o && !o.mort);
+    const heritier = proches.find((o) => o.id === v.conjoint) || proches.find((o) => o.foyer === v.foyer && o.age >= AGE_ADULTE) || proches[0];
+    const argent = Math.round(v.poche.pieces);
+    if (argent > 0) { if (heritier) heritier.poche.pieces += argent; else this.res.pieces += argent; }
+    const foyer = this.foyers[v.foyer];
+    if (foyer) { foyer.nourriture += v.poche.nourriture; foyer.eau += v.poche.eau; }
+    v.poche = { nourriture: 0, eau: 0, pieces: 0, huile: 0, remedes: 0 };
+    this.dettes = this.dettes.filter((d) => d.de !== v.id && d.a !== v.id);
+    for (const r of this.requetes) if (r.de === v.id && !r.repondue) { r.repondue = true; r.reponse = null; }
+    for (const o of this.habitants) if (o.conjoint === v.id) o.conjoint = null;
+    for (const x of this.souhaits) if (x.de === v.id || x.a === v.id) x.t = -1e9;
+    if (v.enceinte && !v.enceinte.accouche) {
+      const pere = this.habitant(v.enceinte.pere);
+      if (pere && !pere.mort) noter(pere, this.temps, `${v.prenom} est morte alors qu'elle attendait votre enfant.`);
+    }
+    v.enceinte = null;
+    // ceux qui l'apprennent : tout le village, et en priorité les proches et ceux qui étaient là
+    const phrase = `${nomComplet(v)}, ${v.age} an${v.age > 1 ? 's' : ''}, est mort${F ? 'e' : ''} ${cause}.`;
+    for (const o of this.habitants) {
+      if (o.nourrisson) continue;
+      const lien = v.famille.includes(o.id);
+      const present = v.interieur ? (o.interieur && o.batiment === v.batiment) : (!o.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10);
+      noter(o, this.temps, `${phrase}${lien ? ` ${F ? 'Elle' : 'Il'} faisait partie de ta famille.` : ''}${present ? ' Tu étais là.' : ''}`);
+      if (lien || present) this.alerter(o);
+    }
+    this.log(phrase, 'mal', [v.id]);
+    this.emit('deces', v);
+  }
+
+  grandir(v) {
+    v.nourrisson = false;
+    v.statut = 'attend'; v.priorite = true; v.depuis = this.temps;
+    v.interieur = true; v.batiment = v.foyer;
+    this.log(`${nomComplet(v)} a ${AGE_NOURRISSON} ans.`, 'info', [v.id]);
+  }
+
+  // Un nourrisson ne décide pas : la maison le nourrit, comme une loi du monde. S'il n'y a plus rien, son corps faiblit.
+  majNourrisson(v, dt) {
+    const b = v.besoins, f = this.foyers[v.foyer];
+    const besoin = 0.00035 * dt;
+    b.energie = 90;
+    if (f && f.nourriture >= besoin && f.eau >= besoin) {
+      f.nourriture -= besoin; f.eau -= besoin;
+      b.faim = Math.min(85, b.faim + 0.5 * dt); b.soif = Math.min(85, b.soif + 0.5 * dt);
+    } else {
+      b.faim = clamp(b.faim - 0.06 * dt, 0, 100); b.soif = clamp(b.soif - 0.1 * dt, 0, 100);
+      if ((b.faim < 40 || b.soif < 40) && this.temps - (v.derniereAlerte || -1e9) > MOIS_MIN) {
+        v.derniereAlerte = this.temps;
+        for (const id of v.parents) {
+          const p = this.habitant(id);
+          if (p && !p.mort) { noter(p, this.temps, `${v.prenom}, ton enfant, a faim et soif, et il n'y a plus de provisions dans la maison.`); this.alerter(p); }
+        }
+      }
+    }
+    if (b.faim < 8 || b.soif < 8) b.sante = clamp(b.sante - 0.03 * dt, 0, 100);
+    else if (b.faim > 30 && b.soif > 30) b.sante = clamp(b.sante + 0.01 * dt, 0, 100);
+    v.agonie = b.sante <= 0.5 ? (v.agonie || 0) + dt : (b.sante > 5 ? 0 : (v.agonie || 0));
+  }
+
+  // ----- avoir un enfant : la loi du monde fixe qui le peut ; le désir, le choix de la personne et le prénom sont aux habitants -----
+  apparentes(a, b) {
+    if (a.parents.includes(b.id) || b.parents.includes(a.id)) return true;
+    if (a.parents.some((p) => b.parents.includes(p))) return true;
+    return a.foyer === b.foyer && a.conjoint !== b.id && b.conjoint !== a.id;
+  }
+
+  verifierProjetEnfant(v, o) {
+    if (!o || o === v) return 'personne de ce nom';
+    if (v.age < AGE_ADULTE || o.age < AGE_ADULTE) return `il faut avoir ${AGE_ADULTE} ans passés, tous les deux`;
+    if (v.genre === o.genre) return 'il faut un homme et une femme';
+    const f = v.genre === 'F' ? v : o;
+    if (f.age > AGE_FECOND_MAX) return `${f.prenom} n'est plus en âge d'attendre un enfant`;
+    if (f.enceinte) return `${f.prenom} attend déjà un enfant`;
+    if (this.temps - (f.dernierAccouchement ?? -1e9) < 3 * MOIS_MIN) return `${f.prenom} vient d'accoucher`;
+    if (this.apparentes(v, o)) return 'vous êtes de la même famille';
+    return null;
+  }
+
+  souhaiterEnfant(v, o) {
+    const raison = this.verifierProjetEnfant(v, o);
+    if (raison) { noter(v, this.temps, `Ce que tu voulais n'était pas possible : ${raison}.`); return; }
+    const reciproque = this.souhaits.find((x) => x.de === o.id && x.a === v.id);
+    if (reciproque) { this.souhaits = this.souhaits.filter((x) => x !== reciproque); this.concevoir(v, o); return; }
+    this.souhaits = this.souhaits.filter((x) => !(x.de === v.id && x.a === o.id));
+    this.souhaits.push({ de: v.id, a: o.id, t: this.temps });
+    noter(v, this.temps, `Tu as dit à ${o.prenom} que tu voudrais un enfant avec ${o.genre === 'F' ? 'elle' : 'lui'}. ${o.genre === 'F' ? 'Elle' : 'Il'} doit le vouloir aussi.`);
+    noter(o, this.temps, `${v.prenom} te dit qu'${v.genre === 'F' ? 'elle' : 'il'} voudrait avoir un enfant avec toi.`);
+    this.alerter(o);
+  }
+
+  concevoir(a, b) {
+    const mere = a.genre === 'F' ? a : b, pere = mere === a ? b : a;
+    mere.enceinte = { pere: pere.id, debut: this.temps, terme: this.temps + GROSSESSE_MOIS * MOIS_MIN };
+    noter(mere, this.temps, `Vous voulez un enfant, ${pere.prenom} et toi : tu l'attends.`);
+    noter(pere, this.temps, `Vous voulez un enfant, ${mere.prenom} et toi : elle l'attend.`);
+    this.log(`${nomComplet(mere)} attend un enfant.`, 'info', [mere.id, pere.id]);
+    this.emit('grossesse', mere);
+  }
+
+  accoucher(m) {
+    m.enceinte.accouche = true;
+    const pere = this.habitant(m.enceinte.pere);
+    const sexe = this.rng.chance(0.5) ? 'F' : 'H';
+    this.naissancesEnAttente.push({ mere: m.id, pere: m.enceinte.pere, t: this.temps, sexe });
+    const enfant = sexe === 'F' ? 'une fille' : 'un garçon';
+    const lui = sexe === 'F' ? 'Elle' : 'Il';
+    noter(m, this.temps, `Tu as accouché : c'est ${enfant}. ${lui} n'a pas encore de prénom.`);
+    this.alerter(m);
+    if (pere && !pere.mort) { noter(pere, this.temps, `${m.prenom} a accouché de votre enfant : c'est ${enfant}. ${lui} n'a pas encore de prénom.`); this.alerter(pere); }
+    this.log(`${nomComplet(m)} a accouché.`, 'info', [m.id]);
+  }
+
+  nommerEnfant(v, brut) {
+    const n = this.naissancesEnAttente.find((x) => x.mere === v.id || x.pere === v.id);
+    if (!n) return;
+    const prenom = nettoyerPrenom(brut);
+    if (!prenom) { noter(v, this.temps, 'Ce prénom est impossible à donner : il faut des lettres, de 2 à 16.'); v.reparler = true; return; }
+    const pris = this.tous.find((o) => o && sansAccent(o.prenom) === sansAccent(prenom));
+    if (pris) { noter(v, this.temps, `Ce prénom est déjà porté par ${nomComplet(pris)}${pris.mort ? ' (mort)' : ''}.`); v.reparler = true; return; }
+    this.creerNouveauNe(n, prenom, false);
+  }
+
+  prenomLibre(sexe) {
+    const pool = sexe === 'F' ? PRENOMS_F : PRENOMS_H;
+    const pris = new Set(this.tous.map((o) => sansAccent(o.prenom)));
+    for (let k = 0; k < 80; k++) { const p = this.rng.pick(pool); if (!pris.has(sansAccent(p))) return p; }
+    return `${pool[0]}${this.tous.length}`;
+  }
+
+  creerNouveauNe(n, prenom, parLeVillage = false) {
+    this.naissancesEnAttente = this.naissancesEnAttente.filter((x) => x !== n);
+    const m = this.habitant(n.mere), p = this.habitant(n.pere);
+    const foyerId = (m && !m.mort ? m.foyer : p && !p.mort ? p.foyer : m?.foyer);
+    const v = creerHabitant({ id: this.tous.length, prenom, nom: (p || m).nom, genre: n.sexe, age: 0, foyer: foyerId, rng: this.rng });
+    v.naissance = this.temps;
+    v.nourrisson = true; v.statut = 'agit'; v.metier = 'enfant'; v.parents = [n.mere, n.pere];
+    v.besoins = { faim: 80, soif: 80, energie: 90, sante: 95, securite: 75 };
+    v.poche = { nourriture: 0, eau: 0, pieces: 0, huile: 0, remedes: 0 };
+    const b = this.batiment(foyerId);
+    v.x = b.door.x; v.z = b.door.z; v.interieur = true; v.batiment = foyerId;
+    // sa famille : ses parents, et ceux qui vivent sous le toit où il naît
+    const fam = new Set([n.mere, n.pere]);
+    for (const o of this.habitants) if (o.foyer === foyerId) fam.add(o.id);
+    v.famille = [...fam].filter((id) => this.habitant(id));
+    for (const id of v.famille) { const o = this.habitant(id); if (!o.famille.includes(v.id)) o.famille.push(v.id); }
+    this.tous.push(v); this.habitants.push(v);
+    this.cacheMembres = null; this.cacheRoster = null;
+    if (m) { m.enceinte = null; m.dernierAccouchement = this.temps; }
+    this.stats.naissances++;
+    const fille = v.genre === 'F';
+    const texte = `${nomComplet(v)} est né${fille ? 'e' : ''}${m ? `, ${fille ? 'fille' : 'fils'} de ${m.prenom}${p ? ` et de ${p.prenom}` : ''}` : ''}.`;
+    for (const o of this.habitants) {
+      if (o.nourrisson) continue;
+      noter(o, this.temps, `${texte}${parLeVillage && (o === m || o === p) ? ' Faute de prénom choisi par les parents, le village l\'a appelé ainsi.' : ''}`);
+    }
+    this.log(texte, 'info', [v.id]);
+    this.emit('naissance', v);
+    return v;
   }
 
   // ---------- Boucle ----------
@@ -195,11 +472,13 @@ export class Simulation {
       this.horaire();
       if (Math.floor(this.temps / MIN_JOUR) !== Math.floor(avant / MIN_JOUR)) this.quotidien();
     }
+    this.etatSaison = saison(this.temps);
     regenerer(this.monde, dt);
     for (const v of this.habitants) this.majHabitant(v, dt);
   }
 
   majHabitant(v, dt) {
+    if (v.nourrisson) { this.majNourrisson(v, dt); return; }
     this.majBesoins(v, dt);
     if (v.statut !== 'agit') return;
     if (v.conversation) {
@@ -214,7 +493,7 @@ export class Simulation {
   }
 
   attendre(v, urgence = '') {
-    if (v.statut === 'attend') return;
+    if (v.statut === 'attend' || v.nourrisson || v.mort) return; // un nourrisson ne décide pas, un mort non plus
     v.statut = 'attend';
     v.depuis = this.temps;
     if (urgence) v.urgence = urgence;
@@ -227,7 +506,9 @@ export class Simulation {
     const dort = a?.action === 'dormir' && !v.path?.length && v.statut === 'agit';
     const dehors = !v.interieur;
     b.faim = clamp(b.faim - (dort ? 0.03 : 0.06) * dt, 0, 100);
-    b.soif = clamp(b.soif - (dort ? 0.05 : 0.1) * dt, 0, 100);
+    // la chaleur de la saison assèche plus vite, surtout dehors et en plein jour
+    const chaud = 1 + 0.7 * this.etatSaison.chaleur * (lumiere(h) > 0 ? 1 : 0.3) * (dehors && !this.sousLaHalle(v) ? 1 : 0.35);
+    b.soif = clamp(b.soif - (dort ? 0.05 : 0.1) * chaud * dt, 0, 100);
     if (dort) {
       const confort = v.interieur && v.batiment === v.foyer ? confortFoyer(this.occupants(v.foyer), this.couchages(v.foyer)) : 0.5;
       b.energie = clamp(b.energie + recuperation(h, confort) * dt, 0, 100);
@@ -236,6 +517,8 @@ export class Simulation {
     if (b.faim < 8 || b.soif < 8) b.sante = clamp(b.sante - 0.03 * dt, 0, 100);
     else if (v.malade) b.sante = clamp(b.sante - 0.02 * dt, 0, 100);
     else if (b.faim > 30 && b.soif > 30) b.sante = clamp(b.sante + 0.006 * dt, 0, 100);
+    // un corps à bout de santé : s'il y reste assez longtemps, il s'éteint (voir cycleDeVie)
+    v.agonie = b.sante <= 0.5 ? (v.agonie || 0) + dt : (b.sante > 5 ? 0 : (v.agonie || 0));
     // sécurité : se reconstruit à l'abri, s'érode dehors dans la tempête ou la nuit, au garde-manger vide
     let cible = v.interieur ? 85 : 65;
     if (dehors && this.meteo.tempete > this.temps) cible -= 25;
@@ -314,7 +597,7 @@ export class Simulation {
   }
 
   entendent(v, rayon = 7) {
-    return this.habitants.filter((o) => o !== v && o.activite?.action !== 'dormir' && (v.interieur ? o.interieur && o.batiment === v.batiment : !o.interieur && Math.hypot(o.x - v.x, o.z - v.z) < rayon));
+    return this.habitants.filter((o) => o !== v && !o.nourrisson && o.activite?.action !== 'dormir' && (v.interieur ? o.interieur && o.batiment === v.batiment : !o.interieur && Math.hypot(o.x - v.x, o.z - v.z) < rayon));
   }
 
   // ---------- Pensée : demandes et décisions ----------
@@ -323,6 +606,12 @@ export class Simulation {
     out.sort((a, b) => (b.priorite ? 1 : 0) - (a.priorite ? 1 : 0) || a.depuis - b.depuis);
     return out.map((v) => v.id);
   }
+  // Le modèle n'a pas pu faire le bilan : il sera redemandé plus tard.
+  bilanManque(id) {
+    const v = this.habitant(id);
+    if (v) v.bilanDu = true;
+  }
+
   demandesBilan() {
     return this.habitants.filter((v) => v.bilanDu && v.statut !== 'reflechit').map((v) => v.id);
   }
@@ -333,12 +622,22 @@ export class Simulation {
   }
   construirePrompt(id, type = 'decision') { return construirePrompt(this, this.habitant(id), type); }
   marquerEnvoye(id, type = 'decision') {
-    const v = this.habitant(id);
+    const v = this.vivant(id);
+    if (!v) return;
     if (type === 'bilan') { v.bilanDu = false; return; }
     v.statut = 'reflechit';
     v.evenementsPris = v.evenements.length;
     v.priorite = false;
   }
+  // Le modèle était indisponible (surchargé, en pause) : l'habitant n'a pas encore pensé,
+  // il repasse en tête de file pour le prochain modèle, sans perdre son tour.
+  remettre(id) {
+    const v = this.habitant(id);
+    if (!v || v.statut !== 'reflechit') return;
+    v.statut = 'attend';
+    v.priorite = true;
+  }
+
   // Le modèle n'a pas répondu : l'habitant reste là, sans rien faire de précis.
   echec(id) {
     const v = this.habitant(id);
@@ -349,6 +648,7 @@ export class Simulation {
 
   appliquer(id, d) {
     const v = this.habitant(id);
+    if (v?.mort) return; // il est mort pendant qu'il réfléchissait
     if (!v || !d || typeof d !== 'object') return this.echec(id);
     this.stats.decisions++;
     v.nbDecisions++;
@@ -356,20 +656,43 @@ export class Simulation {
     v.evenements.splice(0, v.evenementsPris || 0);
     v.evenementsPris = 0;
     v.urgence = '';
-    v.pensee = clip(d.pensee, 400);
+    v.pensee = clip(d.pensee, 1200);
     if (Number.isFinite(Number(d.humeur))) v.humeur = clamp(Math.round(Number(d.humeur)), 0, 100);
-    if (v.pensee) this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
-    retenir(v, this.temps, d.souvenir);
+    if (v.pensee) {
+      this.flux.push({ t: this.temps, id: v.id, type: 'pensee', texte: v.pensee });
+      this.emit('pensee', { id: v.id, texte: v.pensee });
+      if (penseePersonnelle(v.pensee, this.habitants, v)) this.vivre(v, 'pensee', v.pensee);
+    }
+    const souvenir = clip(d.souvenir, 600);
+    retenir(v, this.temps, souvenir);
+    if (souvenir) this.vivre(v, 'souvenir', souvenir);
     const cibleAvis = d.avis_sur ? this.personne(d.avis_sur) : null;
-    if (cibleAvis && cibleAvis !== v && d.avis) v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 200) };
-    if (d.identite && String(d.identite).trim()) v.identite = clip(d.identite, 260);
+    if (cibleAvis && cibleAvis !== v && (d.avis || d.lien)) {
+      const prec = v.avis[cibleAvis.id];
+      const texte = d.avis ? clip(d.avis, 500) : prec?.texte || '';
+      const lien = d.lien ? clip(d.lien, 80) : prec?.lien || '';
+      v.avis[cibleAvis.id] = { t: this.temps, texte, lien };
+      if (texte && texte !== prec?.texte) this.vivre(v, 'avis', texte, { sur: cibleAvis.id, avant: prec?.texte });
+      if (lien && lien !== prec?.lien) this.vivre(v, 'lien', lien, { sur: cibleAvis.id, avant: prec?.lien });
+    }
+    if (d.avis_conseil && String(d.avis_conseil).trim()) {
+      const texte = clip(d.avis_conseil, 600);
+      if (texte !== v.avisConseil?.texte) {
+        const avant = v.avisConseil?.texte;
+        v.avisConseil = { t: this.temps, texte };
+        this.vivre(v, 'conseil', texte, { avant });
+      }
+    }
+    if (d.identite && String(d.identite).trim()) this.changerIdentite(v, clip(d.identite, 600));
     if (d.requete_conseil && String(d.requete_conseil).trim()) {
-      this.requetes.push({ id: this.nextRequete++, de: v.id, texte: clip(d.requete_conseil, 400), t: this.temps, repondue: false });
+      this.requetes.push({ id: this.nextRequete++, de: v.id, texte: clip(d.requete_conseil, 800), t: this.temps, repondue: false });
+      this.vivre(v, 'requete', this.requetes.at(-1).texte);
       v.stats.requetes++;
       this.stats.requetes++;
       this.emit('requete', this.requetes.at(-1));
     }
     if (this.flux.length > 400) this.flux.splice(0, this.flux.length - 400);
+    if (d.prenom_enfant) this.nommerEnfant(v, d.prenom_enfant);
     // une phrase reçue pendant qu'il réfléchissait : il doit y répondre
     const doitRepondre = v.reparler;
     v.reparler = false;
@@ -379,17 +702,42 @@ export class Simulation {
       this.attendre(v);
       v.priorite = true;
     }
-    if (d.action === 'dormir' && v.souvenirs.length >= 10 && this.temps - v.derniereBilan > 14 * 60) v.bilanDu = true;
+    if (d.action === 'dormir' && v.souvenirs.length >= 4 && this.temps - v.derniereBilan > 14 * 60) v.bilanDu = true;
   }
 
   appliquerBilan(id, d) {
     const v = this.habitant(id);
-    if (!v || !d) return;
-    if (d.resume) v.resume = clip(d.resume, 700);
-    if (d.identite) v.identite = clip(d.identite, 260);
-    v.souvenirs = v.souvenirs.slice(-6);
+    if (!v || v.mort || !d) return;
+    if (d.resume) { v.resume = clip(d.resume, 1500); this.vivre(v, 'bilan', v.resume); }
+    if (d.identite) this.changerIdentite(v, clip(d.identite, 600));
+    if (typeof d.lecons === 'string' && clip(d.lecons, 1500) !== v.lecons) {
+      const avant = v.lecons;
+      v.lecons = clip(d.lecons, 1500);
+      if (v.lecons) this.vivre(v, 'lecons', v.lecons, { avant });
+    }
+    // ce qu'il se demande : il peut aussi bien le laisser vide, ou l'effacer
+    if (typeof d.questions === 'string' && clip(d.questions, 1500) !== (v.questions || '')) {
+      const avant = v.questions || '';
+      v.questions = clip(d.questions, 1500);
+      if (v.questions) this.vivre(v, 'questions', v.questions, { avant });
+    }
+    v.souvenirs = v.souvenirs.slice(-12);
     v.derniereBilan = this.temps;
     v.bilanDu = false;
+  }
+
+  // Journal de la vie intérieure : seulement ce que l'habitant a lui-même écrit.
+  vivre(v, type, texte, extra = {}) {
+    if (!texte) return;
+    this.interieur.push({ t: this.temps, id: v.id, type, texte, ...extra });
+    if (this.interieur.length > 1500) this.interieur.splice(0, this.interieur.length - 1500);
+  }
+
+  changerIdentite(v, texte) {
+    if (!texte || texte === v.identite) return;
+    const avant = v.identite;
+    v.identite = texte;
+    this.vivre(v, 'identite', texte, { avant });
   }
 
   personne(txt) {
@@ -406,12 +754,13 @@ export class Simulation {
     const action = ACTIONS.includes(d.action) ? d.action : null;
     if (!action) return this.invalide(v, "cette action n'existe pas");
     const duree = Number.isFinite(Number(d.duree_minutes)) ? Number(d.duree_minutes) : 0;
-    const parole = clip(d.parole, 400);
-    const ton = TON[d.ton] ? d.ton : 'calme';
-    const objet = ['nourriture', 'eau', 'pieces', 'remedes', 'huile'].includes(d.objet) ? d.objet : null;
+    const parole = clip(d.parole, 800);
+    const ton = clip(d.ton, 24).toLowerCase();
+    const objet = nomObjet(d.objet) || (action === 'acheter' ? 'nourriture' : null);
     const qte = clamp(Number(d.quantite) || 1, 0, 200);
-    const spec = { action, parole, ton, objet, qte, pret: !!d.pret };
+    const spec = { action, parole, ton, objet, qte, pret: !!d.pret, dispute: d.dispute === true || d.dispute === 'true' };
     const cible = d.personne ? this.personne(d.personne) : null;
+    if (cible?.nourrisson && action !== 'aller') return this.invalide(v, `${cible.prenom} est un nourrisson`);
     if (v.reposJusqua > this.temps && action === 'travailler') noter(v, this.temps, 'Le conseil t’a accordé un jour de repos.');
     if (v.conversation && action !== 'parler') this.quitterConversation(v);
 
@@ -449,12 +798,17 @@ export class Simulation {
         spec.cible = cible; spec.duree = 5;
         // déjà face à face : on parle tout de suite
         if (v.conversation && v.conversation === cible.conversation && this.proche(v, cible, 9)) {
-          this.parler(v, cible, parole, ton);
+          this.parler(v, cible, parole, ton, spec.dispute);
           this.reprendre(v, spec);
           return;
         }
         spec.res = { maison: cible.interieur ? cible.batiment : null, chez: null, cle: null, suit: cible };
         break;
+      }
+      case 'demander': {
+        if (!cible || cible === v) return this.invalide(v, 'personne de ce nom à qui demander');
+        if (!objet || objet === 'huile') return this.invalide(v, 'précise ce que tu demandes (nourriture, eau, pieces, remedes)');
+        spec.cible = cible; spec.duree = 5; spec.res = { suit: cible }; break;
       }
       case 'donner': case 'prendre': {
         if (!objet || objet === 'huile') return this.invalide(v, "précise ce que tu veux (nourriture, eau, pieces, remedes)");
@@ -469,6 +823,11 @@ export class Simulation {
         if (!['nourriture', 'remedes'].includes(objet)) return this.invalide(v, "on achète des rations (nourriture) ou des remedes");
         spec.duree = 5; spec.res = { cle: 'marche' }; break;
       }
+      case 'avoir_un_enfant': {
+        const raison = this.verifierProjetEnfant(v, cible);
+        if (raison) return this.invalide(v, raison);
+        spec.cible = cible; spec.duree = 10; spec.res = { suit: cible }; break;
+      }
       case 'emmenager': {
         const r = this.resoudreLieu(v, d.lieu);
         const b = r?.maison && this.batiment(r.maison);
@@ -477,7 +836,7 @@ export class Simulation {
         spec.res = { maison: b.id }; spec.duree = 5; break;
       }
     }
-    if (parole && !['parler', 'donner', 'prendre'].includes(action)) this.diffuser(v, parole, ton);
+    if (parole && !['parler', 'donner', 'demander', 'prendre'].includes(action)) this.diffuser(v, parole, ton);
     this.demarrer(v, spec);
   }
 
@@ -493,7 +852,7 @@ export class Simulation {
     const a = {
       type: RENDU[spec.action], action: spec.action, etat: spec.cible && spec.action !== 'parler' ? `${ETAT[spec.action]} (${spec.cible.prenom})` : spec.cible ? `${ETAT[spec.action]} (${spec.cible.prenom})` : ETAT[spec.action],
       debut: this.temps, fin: this.temps + 600, duree: spec.duree || 20,
-      cibleId: spec.cible?.id, objet: spec.objet, qte: spec.qte, pret: spec.pret, parole: spec.parole, ton: spec.ton,
+      cibleId: spec.cible?.id, objet: spec.objet, qte: spec.qte, pret: spec.pret, parole: spec.parole, ton: spec.ton, dispute: spec.dispute,
       bilan: { nourriture: 0, pieces: 0, pierre: 0, bois: 0, huile: 0, remedes: 0, paye: 0, minutes: 0 },
       nomLieu: 'ici',
     };
@@ -557,17 +916,40 @@ export class Simulation {
       case 'puiser_eau': { const q = Math.min(6, 8 - v.poche.eau); v.poche.eau += Math.max(0, q); noter(v, this.temps, `Tu remplis ta cruche à la source (${Math.round(v.poche.eau)} dose(s)).`); break; }
       case 'travailler': this.debutTravail(v, a); break;
       case 'parler': {
-        const o = this.habitant(a.cibleId);
-        if (o && this.proche(v, o, 10)) this.parler(v, o, a.parole, a.ton);
+        const o = this.vivant(a.cibleId);
+        if (o && this.proche(v, o, 10)) this.parler(v, o, a.parole, a.ton, a.dispute);
         else { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'cette personne'}.`); a.fin = this.temps; }
         break;
       }
       case 'donner': this.donner(v, a); break;
+      case 'demander': {
+        const o = this.vivant(a.cibleId);
+        if (o && this.proche(v, o, 10)) this.demanderA(v, o, a);
+        else { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'cette personne'}.`); a.fin = this.temps; }
+        break;
+      }
       case 'prendre': this.prendre(v, a); break;
       case 'acheter': this.acheter(v, a); break;
       case 'emmenager': this.emmenager(v, a); break;
+      case 'avoir_un_enfant': {
+        const o = this.vivant(a.cibleId);
+        if (o && this.proche(v, o, 10)) this.souhaiterEnfant(v, o);
+        else { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'cette personne'}.`); a.fin = this.temps; }
+        break;
+      }
       default: break;
     }
+  }
+
+  // Demander quelque chose à quelqu'un : le jeu porte la demande ; c'est l'autre qui décide d'y répondre (donner, refuser, discuter).
+  demanderA(v, o, a) {
+    const q = Math.round((a.qte || 1) * 10) / 10, obj = NOMS_OBJETS[a.objet] || a.objet;
+    this.stats.demandes++;
+    noter(v, this.temps, `Tu as demandé ${q} ${obj} à ${o.prenom}.`);
+    if (a.parole) this.parler(v, o, a.parole, a.ton, a.dispute);
+    else this.alerter(o);
+    noter(o, this.temps, `${v.prenom} te demande ${q} ${obj}.`);
+    this.vivre(v, 'demande', `${q} ${obj}`, { sur: o.id });
   }
 
   // ---------- Gestes physiques ----------
@@ -645,7 +1027,8 @@ export class Simulation {
 
   travailler(v, a, dt) {
     const comp = v.competence[a.lieuCle] || 0;
-    const meteo = { tempete: this.meteo.tempete > this.temps, secheresse: this.meteo.secheresse > this.temps, bonnePeche: this.meteo.bonnePeche > this.temps };
+    const E = this.etatSaison;
+    const meteo = { tempete: this.meteo.tempete > this.temps, secheresse: this.meteo.secheresse > this.temps, bonnePeche: this.meteo.bonnePeche > this.temps, pluie: E.pluie, chaleurSaison: E.chaleur, seche: E.seche };
     const r = produire(a.lieuCle, this.monde, this.heure(), meteo, comp, dt, this.rendement(v));
     const b = v.besoins;
     b.energie = clamp(b.energie - (r.fatigue || 0) * 0.03 * dt, 0, 100);
@@ -689,10 +1072,12 @@ export class Simulation {
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: null, ton, lieu: v.activite?.nomLieu });
-    for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    this.emit('parole', { id: v.id, a: null, texte, ton });
+    if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { ton });
+    for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${commentDit(ton)} : « ${texte} »`);
   }
 
-  parler(v, cible, texte, ton) {
+  parler(v, cible, texte, ton, dispute = false) {
     if (!texte) { noter(v, this.temps, `Tu es devant ${cible.prenom} mais tu ne dis rien.`); return; }
     let c = v.conversation && v.conversation === cible.conversation ? v.conversation : null;
     if (!c) {
@@ -702,19 +1087,24 @@ export class Simulation {
     }
     c.tours++;
     c.fin = this.temps + clamp(texte.length / 12, 3, 8) + 3;
-    c.dispute = ton === 'colere' || (ton === 'tendu' && c.dispute);
+    const t = sansAccent(ton || '');
+    // une dispute : déclarée par l'habitant lui-même, ou reconnue à un ton de colère qu'il a choisi (furieux, énervé, agacé…)
+    const conflit = dispute || /^(colere|furieu|enerv|agac|fach|hostil|agress|irrit)/.test(t);
+    c.dispute = conflit || (t.startsWith('tendu') && c.dispute);
     v.conversation = cible.conversation = c;
     v.dir = Math.atan2(cible.x - v.x, cible.z - v.z);
     cible.dir = Math.atan2(v.x - cible.x, v.z - cible.z);
     this.stats.paroles++;
     v.stats.paroles++;
     this.flux.push({ t: this.temps, id: v.id, type: 'parole', texte, a: cible.id, ton, lieu: v.activite?.nomLieu });
+    this.emit('parole', { id: v.id, a: cible.id, texte, ton });
+    if (penseePersonnelle(texte, this.habitants, v, ton)) this.vivre(v, 'parole', texte, { sur: cible.id, ton });
     // la cible entend et doit pouvoir répondre
     const dormait = cible.activite?.action === 'dormir' && cible.statut === 'agit';
-    noter(cible, this.temps, `${dormait ? 'Tu es réveillé. ' : ''}${v.prenom} te dit${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    noter(cible, this.temps, `${dormait ? 'Tu es réveillé. ' : ''}${v.prenom} te dit${commentDit(ton)} : « ${texte} »`);
     if (cible.statut === 'reflechit') cible.reparler = true;
     else { cible.path = null; cible.statut = 'attend'; cible.depuis = this.temps; cible.priorite = true; }
-    for (const o of this.entendent(v)) if (o !== cible) noter(o, this.temps, `${v.prenom} dit à ${cible.prenom}${TON[ton] ? ` ${TON[ton]}` : ''} : « ${texte} »`);
+    for (const o of this.entendent(v)) if (o !== cible) noter(o, this.temps, `${v.prenom} dit à ${cible.prenom}${commentDit(ton)} : « ${texte} »`);
     if (c.dispute && !c.loggee) {
       c.loggee = true;
       this.stats.disputes++;
@@ -745,7 +1135,7 @@ export class Simulation {
   }
 
   donner(v, a) {
-    const o = this.habitant(a.cibleId);
+    const o = this.vivant(a.cibleId);
     if (!o || !this.proche(v, o, 12)) { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'la personne'} pour lui donner quelque chose.`); a.fin = this.temps; return; }
     const obj = a.objet, f = this.foyers[v.foyer];
     const chez = v.interieur && v.batiment === v.foyer;
@@ -773,13 +1163,13 @@ export class Simulation {
     noter(o, this.temps, `${v.prenom} t'a donné ${q} ${NOMS_OBJETS[obj]}${motif}.`);
     o.priorite = true;
     if (q >= 4 && obj !== 'eau') this.log(`${nomComplet(v)} donne ${q} ${NOMS_OBJETS[obj]} à ${nomComplet(o)}${motif}.`, 'bien', [v.id, o.id]);
-    if (a.parole) this.parler(v, o, a.parole, a.ton);
+    if (a.parole) this.parler(v, o, a.parole, a.ton, a.dispute);
     else if (o.statut === 'agit') { o.path = null; this.attendre(o); o.priorite = true; }
   }
 
   prendre(v, a) {
     const q0 = a.qte, obj = a.objet;
-    const o = a.cibleId != null ? this.habitant(a.cibleId) : null;
+    const o = a.cibleId != null ? this.vivant(a.cibleId) : null;
     let pris = 0, source = '';
     if (o) {
       const f = this.foyers[o.foyer];
@@ -802,7 +1192,7 @@ export class Simulation {
     this.stats.prises++;
     noter(v, this.temps, `Tu as pris ${pris} ${NOMS_OBJETS[obj]} ${source}, sans rien demander.`);
     // qui a vu ?
-    const temoins = this.habitants.filter((w) => w !== v && (w === o || (w.interieur ? w.batiment === o?.foyer : Math.hypot(w.x - v.x, w.z - v.z) < 12)) && w.activite?.action !== 'dormir');
+    const temoins = this.habitants.filter((w) => w !== v && !w.nourrisson && (w === o || (w.interieur ? w.batiment === o?.foyer : Math.hypot(w.x - v.x, w.z - v.z) < 12)) && w.activite?.action !== 'dormir');
     for (const w of temoins) {
       noter(w, this.temps, `${v.prenom} a pris ${pris} ${NOMS_OBJETS[obj]} ${source}${w === o ? ' : à toi' : ''}.`);
       if (w === o || w.foyer === o?.foyer) { w.besoins.securite = clamp(w.besoins.securite - 15, 0, 100); w.chocJusqua = this.temps + 240; }
@@ -843,8 +1233,80 @@ export class Simulation {
   }
 
   // ---------- Rythmes ----------
+  tomberMalade(v) {
+    v.malade = true;
+    v.besoins.sante = Math.min(v.besoins.sante, 55);
+    noter(v, this.temps, 'Tu te sens malade : fièvre et faiblesse.');
+    this.log(`${nomComplet(v)} est tombé${v.genre === 'F' ? 'e' : ''} malade.`, 'mal', [v.id]);
+  }
+
+  // Les saisons : le jeu change la météo et ses effets physiques ; il ne dit rien à personne.
+  saisons() {
+    const E = this.etatSaison;
+    // une vague de chaleur dure deux mois du village au plus (8 h de jeu) et n'existe qu'en saison chaude
+    if (this.meteo.secheresse > this.temps && (E.nom === 'pluie' || E.nom === 'beau')) this.meteo.secheresse = 0;
+    else if (this.meteo.secheresse > this.temps + 8 * 60) this.meteo.secheresse = this.temps + 8 * 60;
+    if (E.nom !== this.saisonNom) {
+      this.saisonNom = E.nom;
+      this.log({
+        pluie: 'La pluie tombe sur l’île.',
+        beau: 'La pluie a cessé : le beau temps revient.',
+        chaleur: 'La chaleur s’installe sur l’île.',
+        seche: 'La saison sèche commence : la terre se craquelle.',
+      }[E.nom], 'evenement');
+      this.emit('saison', E);
+    }
+    // le puits communal alimente les maisons, en toute saison : une quinzaine de doses par jour pour quatre personnes
+    if (this.bonus.puits) {
+      for (const [id, f] of Object.entries(this.foyers)) {
+        const occ = Math.max(1, this.occupants(id));
+        f.eau = Math.min(occ * 10, f.eau + 0.15 * occ);
+      }
+    }
+    if (E.pluie) {
+      // les jarres des maisons se remplissent, la terre boit
+      for (const [id, f] of Object.entries(this.foyers)) {
+        const occ = Math.max(1, this.occupants(id));
+        f.eau = Math.min(occ * 10, f.eau + 0.9 * occ);
+      }
+      this.monde.fertilite = clamp(this.monde.fertilite + 0.04, 0.1, 1);
+      // sous la pluie, on attrape froid
+      for (const v of this.habitants) if (!v.malade && !v.nourrisson && !v.interieur && this.rng.chance(0.006)) this.tomberMalade(v);
+    }
+  }
+
+  // Les rations du marché ne se gardent pas indéfiniment : elles se gâtent, plus vite par forte chaleur,
+  // et l'entrepôt a une capacité (le surplus se perd vite). Les vivres des maisons, eux, restent chez leurs habitants.
+  denrees() {
+    const stock = this.res.nourriture;
+    if (stock <= 0) return;
+    const perte = Math.min(stock, stock * 0.0015 * (1 + 2 * this.etatSaison.chaleur) + Math.max(0, stock - CAPACITE_MARCHE) * 0.08);
+    this.res.nourriture = stock - perte;
+    this.pertesJour = (this.pertesJour || 0) + perte;
+  }
+
+  // À l'ombre de la halle du marché, la chaleur pèse comme à l'intérieur d'une maison.
+  sousLaHalle(v) {
+    if (!this.bonus.halle) return false;
+    const h = this.batimentsParId.halle;
+    return !!h && Math.abs(v.x - h.x) < h.w / 2 + 1 && Math.abs(v.z - h.z) < h.d / 2 + 1;
+  }
+
+  // La caisse du conseil, en jours de salaires (d'après ce qui a été versé hier) ; null tant qu'on ne le sait pas.
+  joursDeCaisse() {
+    const h = this.historique.at(-1);
+    if (!h || !(h.salaires > 0)) return null;
+    return this.res.pieces / h.salaires;
+  }
+
   horaire() {
     const h = Math.round(this.heure()) % 24;
+    this.saisons();
+    this.denrees();
+    const jours = this.joursDeCaisse();
+    if (jours !== null && jours < 1 && !this.caisseAlertee) { this.caisseAlertee = true; this.log('La caisse du conseil ne couvrira pas une journée de salaires.', 'mal'); }
+    else if (jours === null || jours >= 2) this.caisseAlertee = false;
+    this.cycleDeVie();
     if (h === 6) this.meteoDuJour();
     if (this.navire && this.temps >= this.navire) { this.navire = 0; this.log('Le navire marchand a repris la mer.', 'evenement'); this.emit('navire', false); }
     if (this.projet?.enAttente && this.peutPayer(PROJETS[this.projet.cle].cout)) this.demarrerProjet();
@@ -857,17 +1319,15 @@ export class Simulation {
       jour: this.jour - 1, humeur: this.moyenne('humeur'), confiance: 0,
       nourriture: Math.round(this.res.nourriture + Object.values(this.foyers).reduce((s, f) => s + f.nourriture, 0)), marche: Math.round(this.res.nourriture),
       pieces: Math.round(this.res.pieces), poisson: this.monde.poisson,
+      salaires: Math.round(this.stats.salaires - (this.stats.salairesVeille || 0)), // pièces versées en salaires pendant la journée
     });
+    this.stats.salairesVeille = this.stats.salaires;
+    if (this.pertesJour >= 15) this.log(`Faute de place et à cause de la chaleur, ${Math.round(this.pertesJour)} rations du marché se sont gâtées.`, 'info');
+    this.pertesJour = 0;
     if (this.historique.length > 80) this.historique.shift();
     for (const v of this.habitants) {
       v.impaye = 0;
-      if (!v.malade && rng.chance(risqueMaladie(v, this.bonus))) {
-        v.malade = true;
-        v.besoins.sante = Math.min(v.besoins.sante, 55);
-        noter(v, this.temps, 'Tu te sens malade : fièvre et faiblesse.');
-        this.log(`${nomComplet(v)} est tombé${v.genre === 'F' ? 'e' : ''} malade.`, 'mal', [v.id]);
-      }
-      if (rng.chance(1 / 365)) v.age++;
+      if (!v.malade && rng.chance(risqueMaladie(v, this.bonus, this.etatSaison.chaleur))) this.tomberMalade(v);
     }
     this.dettes = this.dettes.filter((d) => d.montant > 0.5);
     this.emit('jour', this.jour);
@@ -876,7 +1336,7 @@ export class Simulation {
   meteoDuJour() {
     const rng = this.rng;
     if (rng.chance(0.08)) { this.meteo.tempete = this.temps + rng.range(6, 14) * 60; this.log('Une tempête se lève sur la Méditerranée.', 'evenement'); this.emit('meteo', 'tempete'); }
-    else if (rng.chance(0.07)) { this.meteo.secheresse = this.temps + MIN_JOUR * 2; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
+    else if (['chaleur', 'seche'].includes(this.etatSaison.nom) && rng.chance(0.07)) { this.meteo.secheresse = this.temps + 8 * 60; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
     else if (rng.chance(0.1)) { this.meteo.bonnePeche = this.temps + 12 * 60; this.log('Les bancs de sardines s’approchent des côtes.', 'evenement'); }
     if (!this.navire && rng.chance(0.18)) {
       this.navire = this.temps + 11 * 60;
@@ -892,6 +1352,7 @@ export class Simulation {
 
   siteProjet(cle) {
     if (cle === 'puits') return { x: 13, z: 24 };
+    if (cle === 'halle') return { x: PLAZA.x, z: PLAZA.z + 5.5 }; // sur la place du marché, entre les étals
     if (cle === 'jetee') return { x: 2, z: 61 };
     if (cle === 'ecole') return { ...this.batiment('ecole').door };
     const spot = FREE_HOUSE_SPOTS.find(([x, z]) => !this.batiments.some((b) => Math.hypot(b.x - x, b.z - z) < 5));
@@ -929,6 +1390,7 @@ export class Simulation {
       bat = makeBuilding(`maison-${n}`, 'maison', 'Nouvelle maison', p.site.x, p.site.z, 8, 7, Math.atan2(PLAZA.x - p.site.x, PLAZA.z - p.site.z), { etages: 1 });
       this.foyers[bat.id] = { nourriture: 0, eau: 0, pertes: [] };
     } else if (p.cle === 'puits') bat = makeBuilding('puits', 'puits', 'Puits communal', p.site.x, p.site.z, 3, 3, 0);
+    else if (p.cle === 'halle') bat = makeBuilding('halle', 'halle', 'Halle ombragée', p.site.x, p.site.z, 9, 4, 0);
     this.bonus[p.cle] = true;
     if (bat) { bat.ajoute = true; this.batiments.push(bat); this.batimentsParId[bat.id] = bat; this.nav.blockBuilding(bat); }
     this.annoncerEvenement(`Le chantier « ${p.nom} » est terminé : ${PROJETS[p.cle].effet}.`);
@@ -945,7 +1407,7 @@ export class Simulation {
   // Le conseil parle à un habitant : il l'entend et décide quoi répondre.
   dire(id, message) {
     const v = this.habitant(id);
-    if (!v) return;
+    if (!v || v.mort || v.nourrisson) return;
     const msg = clip(message, 300);
     (v.dialogue ||= []).push({ t: this.temps, de: 'conseil', texte: msg });
     noter(v, this.temps, `Un membre du conseil te parle : « ${msg} »`);
@@ -980,7 +1442,7 @@ export class Simulation {
 
   donnerAuHabitant(id, objet, q) {
     const v = this.habitant(id);
-    if (!v) return { ok: false, raison: 'Habitant introuvable.' };
+    if (!v || v.mort) return { ok: false, raison: 'Habitant introuvable.' };
     if (objet === 'pieces') { if (this.res.pieces < q) return { ok: false, raison: 'La caisse est insuffisante.' }; this.res.pieces -= q; }
     else if (objet === 'nourriture') { if (this.res.nourriture < q) return { ok: false, raison: 'Le marché n’a pas assez de rations.' }; this.res.nourriture -= q; }
     else if (objet === 'remedes') { if (this.res.remedes < q) return { ok: false, raison: 'Plus de remèdes.' }; this.res.remedes -= q; }
@@ -993,6 +1455,7 @@ export class Simulation {
 
   amender(id, montant, motif = '') {
     const v = this.habitant(id);
+    if (!v || v.mort) return { ok: false, raison: 'Habitant introuvable.' };
     const m = Math.min(montant, Math.floor(v.poche.pieces));
     if (m <= 0) return { ok: false, raison: `${v.prenom} n'a pas d'argent sur lui.` };
     v.poche.pieces -= m;
@@ -1004,7 +1467,7 @@ export class Simulation {
 
   confierMetier(id, metier) {
     const v = this.habitant(id);
-    if (!v || !METIERS_ADULTES.includes(metier) || this.categorie(v) !== 'adulte') return { ok: false };
+    if (!v || v.mort || !METIERS_ADULTES.includes(metier) || this.categorie(v) !== 'adulte') return { ok: false };
     v.metier = metier;
     noter(v, this.temps, `Le conseil t'a confié le métier de ${libelleMetier(v).toLowerCase()} (lieu : ${LIEUX[METIERS[metier].lieu].nom}).`);
     this.log(`Le conseil confie le métier de ${libelleMetier(v).toLowerCase()} à ${nomComplet(v)}.`, 'conseil', [v.id]);
@@ -1013,6 +1476,7 @@ export class Simulation {
 
   accorderRepos(id) {
     const v = this.habitant(id);
+    if (!v || v.mort) return;
     v.reposJusqua = this.temps + MIN_JOUR;
     noter(v, this.temps, 'Le conseil t’accorde un jour de repos : tu n’es pas attendu au travail.');
   }
@@ -1076,7 +1540,8 @@ export class Simulation {
       journal: this.journal.slice(-200), flux: this.flux.slice(-120), requetes: this.requetes, nextRequete: this.nextRequete,
       res: this.res, prix: this.prix, prixRemede: this.prixRemede, salaire: this.salaire, dettes: this.dettes, monde: this.monde,
       foyers: this.foyers, bonus: this.bonus, projet: this.projet, meteo: this.meteo, navire: this.navire,
-      historique: this.historique, stats: this.stats, habitants: this.habitants,
+      historique: this.historique, stats: this.stats, habitants: this.habitants, interieur: this.interieur,
+      defunts: this.defunts, souhaits: this.souhaits, naissancesEnAttente: this.naissancesEnAttente,
       batimentsAjoutes: this.batiments.filter((b) => b.ajoute), noms: this.batiments.map((b) => [b.id, b.nom, b.famille]),
     }, (k, x) => (typeof x === 'number' && !Number.isInteger(x) ? Math.round(x * 1000) / 1000 : x));
   }
@@ -1090,11 +1555,22 @@ export class Simulation {
     sim.batimentsParId = Object.fromEntries(sim.batiments.map((b) => [b.id, b]));
     for (const [id, nom, famille] of d.noms || []) if (sim.batimentsParId[id]) Object.assign(sim.batimentsParId[id], { nom, famille });
     sim.nav = new NavGrid(sim.batiments);
-    for (const k of ['temps', 'journal', 'flux', 'requetes', 'nextRequete', 'res', 'prix', 'prixRemede', 'salaire', 'dettes', 'monde', 'foyers', 'bonus', 'projet', 'meteo', 'navire', 'historique', 'stats', 'habitants']) {
+    for (const k of ['temps', 'journal', 'flux', 'requetes', 'nextRequete', 'res', 'prix', 'prixRemede', 'salaire', 'dettes', 'monde', 'foyers', 'bonus', 'projet', 'meteo', 'navire', 'historique', 'stats', 'habitants', 'interieur', 'defunts', 'souhaits', 'naissancesEnAttente']) {
       if (d[k] !== undefined) sim[k] = d[k];
     }
     sim.rng.state = d.rng;
     sim.derniereHeure = Math.floor(sim.temps / 60);
+    sim.etatSaison = saison(sim.temps);
+    sim.saisonNom = sim.etatSaison.nom;
+    // numéros d'habitants : vivants et défunts rangés ensemble ; anciennes sauvegardes : dates de naissance déduites de l'âge
+    sim.tous = [];
+    for (const v of [...sim.habitants, ...(sim.defunts || [])]) {
+      if (v.naissance === undefined) v.naissance = sim.temps - (v.age + 0.5) * ANNEE_MIN;
+      v.parents ||= []; v.agonie ||= 0;
+      sim.tous[v.id] = v;
+    }
+    sim.stats = { naissances: 0, deces: 0, ...sim.stats };
+    sim.stats.salairesVeille ??= sim.stats.salaires || 0;
     const convs = new Map();
     for (const v of sim.habitants) {
       if (v.statut === 'reflechit') v.statut = 'attend';

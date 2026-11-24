@@ -4,6 +4,8 @@
 
 import { libelleMetier, nomComplet } from './villager.js';
 import { METIERS, LIEUX, NOMS_OBJETS } from './data.js';
+import { depuis, moisDepuis, MOIS_MIN } from './vie.js';
+import { dateDuVillage } from './saison.js';
 
 const mot = (x, bas, hauts) => {
   for (const [seuil, texte] of hauts) if (x >= seuil) return texte;
@@ -12,12 +14,14 @@ const mot = (x, bas, hauts) => {
 
 function etatCorps(v) {
   const b = v.besoins;
-  const faim = mot(b.faim, 'tu es affamé', [[75, 'tu es rassasié'], [50, "tu n'as pas faim"], [30, 'tu as faim'], [15, 'tu as très faim']]);
-  const soif = mot(b.soif, 'tu es assoiffé', [[75, "tu n'as pas soif"], [50, 'tu as un peu soif'], [30, 'tu as soif'], [15, 'tu as très soif']]);
-  const fatigue = mot(b.energie, "tu t'écroules de fatigue", [[75, 'tu es en forme'], [50, 'tu es un peu fatigué'], [30, 'tu es fatigué'], [15, 'tu es épuisé']]);
-  const sante = v.malade ? 'tu es malade' : mot(b.sante, 'tu es très affaibli', [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile']]);
-  const secu = mot(b.securite, 'tu as très peur', [[70, 'tu te sens en sécurité'], [45, 'tu te sens un peu inquiet'], [25, 'tu te sens menacé']]);
-  return `Faim : ${faim} (${Math.round(b.faim)}/100). Soif : ${soif} (${Math.round(b.soif)}/100). Forme : ${fatigue} (${Math.round(b.energie)}/100). Santé : ${sante} (${Math.round(b.sante)}/100). Sécurité : ${secu} (${Math.round(b.securite)}/100).`;
+  const e = v.genre === 'F' ? 'e' : ''; // accord : « tu es fatiguée »
+  const faim = mot(b.faim, `tu es affamé${e}`, [[75, `tu es rassasié${e}`], [50, "tu n'as pas faim"], [30, 'tu as faim'], [15, 'tu as très faim']]);
+  const soif = mot(b.soif, `tu es assoiffé${e}`, [[75, "tu n'as pas soif"], [50, 'tu as un peu soif'], [30, 'tu as soif'], [15, 'tu as très soif']]);
+  const fatigue = mot(b.energie, "tu t'écroules de fatigue", [[75, 'tu es en forme'], [50, `tu es un peu fatigué${e}`], [30, `tu es fatigué${e}`], [15, `tu es épuisé${e}`]]);
+  const sante = v.malade && b.sante >= 15 ? 'tu es malade' : mot(b.sante, "tu sens tes forces t'abandonner", [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile'], [15, `tu es très affaibli${e}`]]);
+  const secu = mot(b.securite, 'tu as très peur', [[70, 'tu te sens en sécurité'], [45, (e ? 'tu te sens un peu inquiète' : 'tu te sens un peu inquiet')], [25, `tu te sens menacé${e}`]]);
+  // des sensations, pas des chiffres : personne ne connaît sa soif « à 64 sur 100 »
+  return `${faim}, ${soif}, ${fatigue}, ${sante}, ${secu}.`;
 }
 
 function periode(h) {
@@ -46,11 +50,15 @@ function quiEstLa(sim, v) {
     if (!proche) continue;
     let etat = o.conversation ? 'est en pleine conversation' : o.activite?.etat || 'est là';
     if (o.statut !== 'agit' && !o.conversation) etat = 'est là, sans rien faire de précis';
+    if (o.nourrisson) etat = 'est un nourrisson';
     out.push(`${nomComplet(o)} (${o.age} ans, ${libelleMetier(o).toLowerCase()}${o.malade ? ', a l\'air malade' : ''}) ${etat.toLowerCase()}`);
     if (out.length >= 7) break;
   }
   return out;
 }
+
+// Ce qu'il pense d'une personne, et ce qu'elle est pour lui, avec ses mots à lui
+const phraseAvis = (sim, id, a) => `${sim.habitant(Number(id)).prenom}${a.lien ? ` (pour toi : ${a.lien})` : ''}${a.texte ? ` : ${a.texte}` : ''}`;
 
 export function construirePrompt(sim, v, type = 'decision', { commun = true } = {}) {
   const h = sim.heure();
@@ -59,27 +67,38 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   const maison = sim.batiment(v.foyer);
   const occupants = sim.occupants(v.foyer);
   const couchages = sim.couchages(v.foyer);
-  const famille = v.famille.map((id) => sim.habitant(id)).map((o) => `${o.prenom} (${o.age} ans)`).join(', ');
+  const proches = v.famille.map((id) => sim.habitant(id)).filter((o) => o && !o.mort);
+  const famille = proches.map((o) => `${o.prenom} (${o.age} an${o.age > 1 ? 's' : ''}${o.nourrisson ? ', nourrisson' : ''})`).join(', ');
+  const disparus = v.famille.map((id) => sim.habitant(id)).filter((o) => o?.mort).map((o) => `${o.prenom} (mort${o.genre === 'F' ? 'e' : ''} ${o.mort.cause}, ${depuis(o.mort.t, sim.temps)})`);
+  const attendus = [];
+  if (v.enceinte && !v.enceinte.accouche) attendus.push(`Tu attends un enfant de ${sim.habitant(v.enceinte.pere)?.prenom || 'son père'} (${moisDepuis(v.enceinte.debut, sim.temps)} mois sur 9).`);
+  for (const o of sim.habitants) if (o.enceinte && !o.enceinte.accouche && o.enceinte.pere === v.id) attendus.push(`${o.prenom} attend ton enfant (${moisDepuis(o.enceinte.debut, sim.temps)} mois sur 9).`);
+  for (const n of sim.naissancesEnAttente) if (n.mere === v.id || n.pere === v.id) attendus.push(`Ton enfant vient de naître (${n.sexe === 'F' ? 'une fille' : 'un garçon'}) et n'a pas encore de prénom.`);
   const L = [];
 
   if (type === 'bilan') {
     L.push(`Tu es ${nomComplet(v)}, ${v.age} ans. Il est ${hh}h${mm}, tu vas dormir.`);
     if (v.identite) L.push(`Ce que tu écrivais de toi : ${v.identite}`);
     if (v.resume) L.push(`Ton dernier résumé : ${v.resume}`);
+    if (v.lecons) L.push(`Ce que tu pensais avoir compris de la vie ici : ${v.lecons}`);
+    if (v.questions) L.push(`Ce que tu te demandais : ${v.questions}`);
     L.push('Ce que tu as retenu récemment :');
-    for (const s of v.souvenirs.slice(-14)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
-    const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => `${sim.habitant(Number(id)).prenom} : ${a.texte}`);
+    for (const s of v.souvenirs.slice(-24)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
+    const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => phraseAvis(sim, id, a));
     if (avis.length) L.push(`Tes avis sur les autres : ${avis.join(' ; ')}`);
+    if (v.avisConseil) L.push(`Ce que tu penses du conseil : ${v.avisConseil.texte}`);
     return L.join('\n');
   }
 
   // ----- décision -----
   L.push(`Jour ${sim.jour}, ${hh}h${mm} (${periode(h)}). ${sim.meteoTexte()}`);
-  L.push(`Tu es ${nomComplet(v)}, ${v.age} ans, ${v.genre === 'F' ? 'une femme' : 'un homme'}. ${METIERS[v.metier]?.lieu ? `Ton métier : ${libelleMetier(v).toLowerCase()} (lieu de travail habituel : ${LIEUX[METIERS[v.metier].lieu].nom}).` : `Ta situation : ${libelleMetier(v).toLowerCase()}, sans métier confié.`}`);
+  L.push(`Tu es ${nomComplet(v)}, ${v.age} ans, ${v.genre === 'F' ? 'une femme' : 'un homme'}. ${v.metier === 'sansmetier' ? 'Tu es adulte et le conseil ne t\'a pas confié de métier.' : METIERS[v.metier]?.lieu ? `Ton métier : ${libelleMetier(v).toLowerCase()} (lieu de travail habituel : ${LIEUX[METIERS[v.metier].lieu].nom}).` : `Ta situation : ${libelleMetier(v).toLowerCase()}, sans métier confié.`}`);
   if (v.identite) L.push(`Ce que tu écris de toi : ${v.identite}`);
   L.push(`Ton foyer : ${maison?.nom || 'ta maison'}, ${occupants} personne(s) pour ${couchages} couchage(s)${famille ? `. Ta famille : ${famille}` : '. Tu vis seul'}.`);
+  if (disparus.length) L.push(`Ceux que tu as perdus : ${disparus.join(' ; ')}.`);
+  for (const t of attendus) L.push(t);
   L.push('');
-  L.push(`Ton corps — ${etatCorps(v)}`);
+  L.push(`Ce que tu ressens : ${etatCorps(v)}`);
   const p = v.poche;
   const porte = [p.nourriture >= 0.5 && `${Math.round(p.nourriture * 10) / 10} ration(s)`, p.eau >= 0.5 && `${Math.round(p.eau)} dose(s) d'eau`, p.huile >= 0.5 && `${Math.round(p.huile)} jarre(s) d'huile`, p.remedes >= 0.5 && `${Math.round(p.remedes)} remède(s)`].filter(Boolean).join(', ');
   L.push(`Tu as ${Math.round(p.pieces)} pièce(s) sur toi${porte ? ` et tu portes : ${porte}` : ''}. Chez toi : ${Math.round(foyer?.nourriture ?? 0)} ration(s), ${Math.round(foyer?.eau ?? 0)} dose(s) d'eau.`);
@@ -90,7 +109,7 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   L.push(`Où tu es : ${lieuActuel(sim, v)}.`);
   const la = quiEstLa(sim, v);
   L.push(la.length ? `Autour de toi : ${la.join(' ; ')}.` : 'Il n\'y a personne autour de toi.');
-  if (v.urgence) L.push(`Ton corps te presse : ${v.urgence}.`);
+  if (v.urgence) L.push(`Ton corps : ${v.urgence}.`);
 
   const ev = v.evenements.slice(-10);
   if (ev.length) {
@@ -99,24 +118,28 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     for (const e of ev) L.push(`- ${e.texte}`);
   }
 
-  const souv = v.souvenirs.slice(-8);
-  if (v.resume || souv.length) {
+  const souv = v.souvenirs.slice(-18);
+  if (v.resume || v.lecons || v.questions || souv.length) {
     L.push('');
     if (v.resume) L.push(`Ce que tu retiens de ta vie : ${v.resume}`);
+    if (v.lecons) L.push(`Ce que tu as compris de la vie ici : ${v.lecons}`);
+    if (v.questions) L.push(`Ce que tu te demandes en ce moment : ${v.questions}`);
     if (souv.length) {
       L.push('Tes souvenirs récents :');
       for (const s of souv) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
     }
   }
-  const concernes = new Set([...v.famille, ...sim.habitants.filter((o) => o !== v && (o.interieur ? o.batiment === v.batiment && v.interieur : !v.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10)).map((o) => o.id)]);
-  const avis = [...concernes].filter((id) => v.avis[id]).map((id) => `${sim.habitant(id).prenom} : ${v.avis[id].texte}`);
-  if (avis.length) L.push(`Ton avis sur ceux qui sont là : ${avis.join(' ; ')}.`);
+  const recents = Object.entries(v.avis).sort((a, b) => (b[1].t ?? 0) - (a[1].t ?? 0)).slice(0, 4).map(([id]) => Number(id));
+  const concernes = new Set([...v.famille, ...recents, ...sim.habitants.filter((o) => o !== v && (o.interieur ? o.batiment === v.batiment && v.interieur : !v.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10)).map((o) => o.id)]);
+  const avis = [...concernes].filter((id) => v.avis[id]).map((id) => phraseAvis(sim, id, v.avis[id]));
+  if (avis.length) L.push(`Ce que tu penses de tes proches et des gens autour de toi : ${avis.join(' ; ')}.`);
+  if (v.avisConseil) L.push(`Ce que tu penses du conseil : ${v.avisConseil.texte}`);
 
   if (!commun) return L.join('\n');
   L.push('');
   L.push(infosVillage(sim));
   L.push('');
-  L.push('Que fais-tu maintenant ? Réponds par le JSON.');
+  L.push('Réponds par le JSON.');
   return L.join('\n');
 }
 
@@ -128,6 +151,11 @@ export function infosVillage(sim) {
   L.push(`- Le conseil paie ${sim.salaire} pièce(s) par heure travaillée.${sim.projet && !sim.projet.enAttente ? ` Un chantier est ouvert : ${sim.projet.nom}.` : ''}${sim.navire ? ' Un navire marchand est au port.' : ''}`);
   const libres = sim.maisonsLibres();
   if (libres.length) L.push(`- Maison(s) libre(s) : ${libres.map((b) => `${b.id} (${b.nom})`).join(', ')}.`);
+  L.push(`- Le temps : nous sommes en ${dateDuVillage(sim.temps).texte}. Une année dure ici deux jours (un mois, quatre heures).`);
+  const E = sim.etatSaison;
+  L.push(E.nom === 'pluie' ? `- Saison : c'est le mois de la pluie (la seule de l'année, elle dure ${Math.max(1, Math.ceil(E.resteDePluie / 60))} h de plus).` : `- Saison : mois ${E.mois} sur 12 ; la pluie revient dans ${Math.max(1, Math.ceil(E.jusquaPluie / MOIS_MIN))} mois.`);
+  if (sim.bonus.puits) L.push('- Le puits communal remplit peu à peu les jarres des maisons.');
+  if (sim.bonus.halle) L.push('- Une halle ombragée, sur la place du marché, abrite de la chaleur.');
   L.push(`- Les habitants : ${sim.roster()}`);
   return L.join('\n');
 }

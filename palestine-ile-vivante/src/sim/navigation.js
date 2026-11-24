@@ -86,6 +86,7 @@ export class NavGrid {
   }
 
   blockBuilding(b) {
+    if (b.type === 'halle') return; // un abri ouvert : on passe dessous
     const c = Math.cos(b.rot), s = Math.sin(b.rot);
     const hw = b.w / 2 + 0.4, hd = b.d / 2 + 0.4;
     const R = Math.hypot(hw, hd);

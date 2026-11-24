@@ -4,8 +4,13 @@
 
 import { METIERS, METIERS_ADULTES, PROJETS, NOMS_OBJETS } from '../sim/data.js';
 import { nomComplet, libelleMetier } from '../sim/villager.js';
+import { moisDepuis, depuis } from '../sim/vie.js';
+import { NOMS_SAISON, dateDuVillage } from '../sim/saison.js';
+import { dureeFrancaise as dureeFrancaiseUI } from '../sync.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Une clé Google commence par « AIza » ; sinon, c'est une clé Groq.
+const fournisseurDeCle = (cle) => (/^AIza/.test(cle) ? 'gemini' : 'groq');
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const $ = (s) => document.querySelector(s);
 const arrondi = (x) => Math.round(x * 10) / 10;
@@ -25,7 +30,6 @@ export class Interface {
     this.onglet = 'village';
     this.selection = null;
     this.filtre = { texte: '', metier: '', tri: 'nom' };
-    this.montrerPensees = false;
     this.dernierRendu = 0;
     this.penseur = null;
     this.nbRequetesVues = 0;
@@ -58,6 +62,8 @@ export class Interface {
     });
 
     sim.on('requete', (r) => { this.toast(`${sim.habitant(r.de).prenom} s'adresse au conseil : « ${r.texte.slice(0, 90)} »`, 'conseil'); this.majBadges(); });
+    sim.on('deces', (v) => this.toast(`${nomComplet(v)} est mort${v.genre === 'F' ? 'e' : ''} ${v.mort.cause}.`, 'mal'));
+    sim.on('naissance', (v) => this.toast(`${nomComplet(v)} est né${v.genre === 'F' ? 'e' : ''}.`, 'bien'));
     sim.on('journal', (e) => { if (e.type === 'evenement' || /Chantier terminé|a été vu/.test(e.texte)) this.toast(e.texte, e.type); });
     this.majBadges();
     this.rendreContenu();
@@ -92,7 +98,11 @@ export class Interface {
     const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
     const phase = h >= 5.5 && h < 7 ? 'aube' : h >= 7 && h < 18.5 ? 'jour' : h >= 18.5 && h < 20.5 ? 'crépuscule' : 'nuit';
     $('#horloge').textContent = `Jour ${s.jour} · ${hh}h${String(mm).padStart(2, '0')} · ${phase}`;
+    const dateEl = $('#date-village');
+    if (dateEl) dateEl.textContent = dateDuVillage(s.temps).texte;
     const m = [];
+    const E = s.etatSaison;
+    m.push({ pluie: '🌧 Pluie', beau: '☀ Beau temps', chaleur: '🔥 Chaleur', seche: '🏜 Saison sèche' }[E.nom]);
     if (s.meteo.tempete > s.temps) m.push('Tempête');
     if (s.meteo.secheresse > s.temps) m.push('Vague de chaleur');
     if (s.navire) m.push('Navire au port');
@@ -100,7 +110,7 @@ export class Interface {
     document.querySelectorAll('#vitesses button').forEach((b) => b.classList.toggle('actif', Number(b.dataset.v) === vitesse));
     const pieces = (x) => Math.floor(x);
     $('#ressources').innerHTML = [
-      ['Caisse', pieces(s.res.pieces), '#e6b450', 'Pièces du conseil : paient les salaires'],
+      ['Caisse', pieces(s.res.pieces), '#e6b450', s.joursDeCaisse() === null ? 'Pièces du conseil : paient les salaires' : `Pièces du conseil : ${s.joursDeCaisse().toFixed(1)} jour(s) de salaires`],
       ['Marché', pieces(s.res.nourriture), '#8fb85a', 'Rations à vendre'],
       ['Maisons', pieces(s.nourritureFoyers()), '#6f9a45', 'Rations dans les maisons'],
       ['Huile', pieces(s.res.huile), '#c9b04a', ''], ['Pierre', pieces(s.res.pierre), '#c8bba3', ''], ['Bois', pieces(s.res.bois), '#9c7a52', ''], ['Remèdes', pieces(s.res.remedes), '#7ac0b0', ''],
@@ -122,14 +132,14 @@ export class Interface {
         html = `<span>${enPause ? 'Le temps attend : ' : ''}${n} habitant${n > 1 ? 's' : ''} doi${n > 1 ? 'vent' : 't'} décider.</span><button class="btn principal" data-reflechir type="button">Laisser réfléchir</button>${p.derniereErreur ? `<small>${esc(p.derniereErreur)}</small>` : ''}`;
       } else if (p.derniereErreur) html = esc(p.derniereErreur);
     } else if (p?.mode === 'groq') {
-      if (!p.pret) html = 'Connexion à Groq…';
+      if (!p.pret) html = 'Connexion aux modèles…';
       else if (!p.disponible && !p.cle) {
         cls = 'alerte';
-        html = `<form data-cle-groq><b>Pour que les habitants pensent seuls, il faut une clé Groq gratuite.</b>
-          <small>1. Ouvrez <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> et connectez-vous (un compte Google suffit).<br>2. Touchez « Create API Key », puis copiez la clé.<br>3. Collez-la ici. Elle reste sur votre téléphone.</small>
-          <input id="cle-groq" type="password" autocomplete="off" placeholder="gsk_…" aria-label="Clé Groq"><button class="btn principal" type="submit">Enregistrer</button>
+        html = `<form data-cle-groq><b>Pour que les habitants pensent seuls, il faut une clé gratuite : Groq ou Google Gemini (les deux, c'est encore mieux).</b>
+          <small><b>Groq</b> : ouvrez <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>, touchez « Create API Key », copiez la clé (gsk_…).<br><b>Gemini</b> : ouvrez <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, touchez « Create API key », copiez la clé (AIza…).<br>Collez-la ici. Elle reste sur votre téléphone.</small>
+          <input id="cle-groq" type="password" autocomplete="off" placeholder="gsk_… ou AIza…" aria-label="Clé Groq ou Gemini"><button class="btn principal" type="submit">Enregistrer</button>
           ${p.derniereErreur ? `<small class="neg">${esc(p.derniereErreur)}</small>` : ''}</form>`;
-      } else if (!p.disponible) { cls = 'alerte'; html = `${esc(p.derniereErreur || 'Groq indisponible.')} <button class="btn" data-oublier-cle type="button">Changer de clé</button>`; }
+      } else if (!p.disponible) { cls = 'alerte'; html = `${esc(p.derniereErreur || 'Modèles indisponibles.')} <button class="btn" data-oublier-cle type="button">Changer de clé</button>`; }
       else if (p.derniereErreur) html = esc(p.derniereErreur);
       else if (enPause) html = `⏳ Les habitants réfléchissent (${s.nbAttente()} en attente)…`;
     } else if (p && !p.disponible) {
@@ -144,16 +154,17 @@ export class Interface {
       b.dataset.ecoute = '1';
       b.addEventListener('click', (e) => {
         if (e.target.closest('[data-reflechir]')) this.penseur?.reflechir?.();
-        if (e.target.closest('[data-oublier-cle]')) { this.penseur?.oublierCle?.(); b.dataset.cache = ''; }
+        if (e.target.closest('[data-oublier-cle]')) { for (const f of ['groq', 'gemini']) this.penseur?.oublierCle?.(f); b.dataset.cache = ''; }
       });
       b.addEventListener('submit', async (e) => {
         e.preventDefault();
         const v = b.querySelector('#cle-groq')?.value.trim();
         if (!v) return;
         b.dataset.cache = '';
-        const ok = await this.penseur?.enregistrerCle?.(v);
+        const f = fournisseurDeCle(v);
+        const ok = await this.penseur?.enregistrerCle?.(v, f);
         b.dataset.cache = '';
-        this.toast(ok ? `Clé acceptée. Les habitants pensent avec ${this.penseur.modele}.` : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
+        this.toast(ok ? `Clé ${f === 'gemini' ? 'Gemini' : 'Groq'} acceptée. Les habitants pensent seuls.` : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
       });
     }
   }
@@ -190,17 +201,21 @@ export class Interface {
     const malades = s.habitants.filter((v) => v.malade).length;
     const rep = s.repartitionMetiers();
     const max = Math.max(...Object.values(rep));
-    const ordre = ['agriculteur', 'pecheur', 'oleiculteur', 'marchand', 'batisseur', 'charpentier', 'artisan', 'soignant', 'enseignant', 'imam', 'eleve', 'enfant', 'ancien'];
+    const ordre = ['agriculteur', 'pecheur', 'oleiculteur', 'marchand', 'batisseur', 'charpentier', 'artisan', 'soignant', 'enseignant', 'imam', 'sansmetier', 'eleve', 'enfant', 'ancien'];
     const fin = s.nourritureFoyers();
     const dettes = s.dettes.reduce((t, d) => t + d.montant, 0);
     const p = this.penseur;
     let out = `<h3>Le village</h3>
       <div class="grille2">
         <div class="stat"><b>${s.habitants.length}</b><span>habitants · ${s.batiments.filter((b) => b.type === 'maison').length} maisons</span></div>
+        <div class="stat"><b>${NOMS_SAISON[s.etatSaison.nom]}</b><span>mois ${s.etatSaison.mois} sur 12 · ${s.etatSaison.pluie ? `la pluie dure encore ${Math.max(1, Math.ceil(s.etatSaison.resteDePluie / 60))} min (à ×1)` : `prochaine pluie dans ${Math.ceil(s.etatSaison.jusquaPluie / 60)} min (à ×1)`}</span></div>
+        <div class="stat"><b>${dateDuVillage(s.temps).texte}</b><span>une année = 2 jours · ${s.stats.naissances || 0} naissance${(s.stats.naissances || 0) > 1 ? 's' : ''}, ${s.stats.deces || 0} décès</span></div>
         <div class="stat"><b>${malades}</b><span>malade${malades > 1 ? 's' : ''}</span></div>
         <div class="stat"><b>${Math.round(fin)}</b><span>rations dans les maisons</span></div>
+        <div class="stat ${(s.joursDeCaisse() ?? 9) < 1 ? 'alerte-stat' : ''}"><b>${s.joursDeCaisse() === null ? '—' : `${s.joursDeCaisse() < 10 ? s.joursDeCaisse().toFixed(1) : Math.round(s.joursDeCaisse())} j`}</b><span>de salaires en caisse (${Math.round(s.res.pieces)} pièces${s.historique.at(-1)?.salaires ? `, ${s.historique.at(-1).salaires} versées hier` : ''})</span></div>
         <div class="stat"><b>${Math.round(dettes)}</b><span>pièces de dettes entre habitants</span></div>
       </div>
+      ${s.defunts.length ? `<h3>Disparus du village</h3>${[...s.defunts].reverse().slice(0, 20).map((d) => `<div class="relation"><span class="lien" data-hab="${d.id}">${esc(nomComplet(d))}</span><span class="note">${d.age} an${d.age > 1 ? 's' : ''} · ${esc(d.mort.cause)} · ${esc(depuis(d.mort.t, s.temps))}</span></div>`).join('')}` : ''}
       <h3>Économie</h3>
       <form class="inline" data-form="economie">
         <label>Salaire <input name="salaire" type="number" step="0.1" min="0" max="10" value="${s.salaire}"> pièce/h</label>
@@ -242,13 +257,52 @@ export class Interface {
         <button class="btn" data-commerce="acheterRemedes" ${s.res.pieces < 30 ? 'disabled' : ''}>8 remèdes ← 30 pièces</button></div>`;
     } else out += `<p class="note">Aucun navire à quai.</p>`;
     if (p?.mode === 'groq') {
-      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Groq, modèle ${esc(p.modele)} : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse, ${(p.stats.ms / 1000).toFixed(1)} s par groupe.` : 'Aucune clé Groq valide.'}</p>`;
+      out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Dernier modèle : ${esc(p.fournisseurActuel === 'gemini' ? 'Gemini' : 'Groq')} ${esc(p.modele)} · ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse, ${(p.stats.ms / 1000).toFixed(1)} s par groupe.` : 'Aucune clé valide.'}</p>`;
+      for (const [f, nom, lien, ph] of [['groq', 'Groq', 'https://console.groq.com/keys', 'gsk_…'], ['gemini', 'Google Gemini', 'https://aistudio.google.com/apikey', 'AIza…']]) {
+        if (p.aCle?.(f)) {
+          out += `<p class="note">${nom} : ${p.actif(f) ? `<span class="pos">actif</span> · ${p.parFournisseur?.[f] || 0} décisions` : `<span class="neg">${esc(p.erreurs?.[f] || 'indisponible')}</span>`} <button class="btn" data-action="oublier-cle" data-fournisseur="${f}" type="button">Retirer la clé</button></p>`;
+        } else {
+          out += `<form data-form="cle" data-fournisseur="${f}" class="boutons"><small>Ajouter une clé ${nom} gratuite (<a href="${lien}" target="_blank" rel="noopener">obtenir une clé</a>). Quand un modèle atteint sa limite, les habitants continuent avec l'autre.</small>
+            <input name="cle" type="password" autocomplete="off" placeholder="${ph}" aria-label="Clé ${nom}"><button class="btn" type="submit">Enregistrer</button></form>`;
+        }
+      }
     } else if (p?.mode === 'claude') {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Claude, sur votre compte : ${p.stats.appels} appel(s), ${p.stats.ok} décisions reçues, ${p.stats.echecs} sans réponse. Chaque toucher sur « Laisser réfléchir » fait penser jusqu'à 16 habitants, chacun d'après sa propre perception.` : esc(p.derniereErreur)}</p>`;
     } else if (p) {
       out += `<h3>Pensée des habitants</h3><p class="note">${p.disponible ? `Fournisseur : <b>${esc(p.fournisseur)}</b> (${esc(p.modele)}) · ${p.stats.ok} pensées reçues, ${p.stats.echecs} échecs · ${(p.stats.ms / 1000).toFixed(1)} s en moyenne · ${p.actifs} en cours.` : 'Aucun modèle connecté.'}</p>`;
     }
+    out += this.carteRelais();
     out += `<h3>Partie</h3><div class="boutons"><button class="btn" data-action="sauver">Sauvegarder</button><button class="btn" data-action="charger">Charger</button><button class="btn danger" data-action="recommencer">Nouvelle île</button></div>`;
+    return out;
+  }
+
+  // ---------- Relais de nuit ----------
+  carteRelais() {
+    const r = this.relais;
+    if (!r || !this.penseur || this.penseur.mode !== 'groq') return '';
+    let out = '<h3>Relais de nuit</h3>';
+    if (!r.actif) {
+      return out + `<p class="note">Pour que le village continue de vivre pendant que vous dormez ou que vous fermez la page, un serveur gratuit prend le relais avec <b>vos</b> clés Groq / Gemini. Elles sont gardées dans le stockage privé de votre projet Vercel, uniquement pour faire penser les habitants, et vous pouvez les effacer à tout moment. Le village avance tant que les modèles gratuits répondent ; il s'arrête quand leurs quotas du jour sont épuisés.</p>
+        <form data-form="relais-code" class="boutons"><small>Choisissez un code (8 caractères au moins) : il protège votre village des autres visiteurs du site. Gardez-le, il sert à retrouver votre village.</small>
+        <input name="code" type="password" minlength="8" autocomplete="new-password" placeholder="Code du village" aria-label="Code du village">
+        <select name="heures" aria-label="Durée du relais"><option value="6">6 h</option><option value="10" selected>10 h</option><option value="14">14 h</option></select>
+        <button class="btn principal" type="submit">Activer</button></form>`;
+    }
+    // état connu du serveur (rafraîchi au plus toutes les 30 s)
+    if (!this._relaisRafraichi || Date.now() - this._relaisRafraichi > 30000) {
+      this._relaisRafraichi = Date.now();
+      r.rafraichir(0).then(() => { if (this.onglet === 'village') this.rendreContenu(true); });
+    }
+    const s = r.statut, maintenant = Date.now();
+    const il = (ms) => { const m = Math.max(0, Math.round((maintenant - ms) / 60000)); return m < 1 ? 'à l’instant' : m < 90 ? `il y a ${m} min` : `il y a ${Math.round(m / 60)} h`; };
+    out += `<p class="note">${r.veille ? `<span class="pos">Relais armé</span> : quand vous quitterez la page, le village continuera ${s?.veilleJusqua && s.veilleJusqua > maintenant ? `jusqu'à ${new Date(s.veilleJusqua).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : `pendant ${this.heuresVeille || 10} h`}.` : '<span class="neg">Relais éteint</span> : le village s\'arrête quand vous fermez la page.'}${s?.cles ? ` Clés confiées : ${[s.cles.groq && 'Groq', s.cles.gemini && 'Gemini'].filter(Boolean).join(' + ') || 'aucune'}.` : ''}</p>`;
+    if (s?.relais?.dernier) {
+      const x = s.relais;
+      out += `<p class="note">Dernier passage du relais ${il(x.dernier)} : ${x.raison ? esc(x.raison) : `${dureeFrancaiseUI(x.minutesJeu || 0)} de jeu, ${x.decisions ?? 0} décisions${x.deces ? `, ${x.deces} décès` : ''}${x.naissances ? `, ${x.naissances} naissance(s)` : ''}${x.arret === 'quotas' ? ' (arrêté : quotas gratuits épuisés)' : ''}`}. Au total : ${dureeFrancaiseUI(x.minutesJeuTotal || 0)} de jeu hors de la page.</p>`;
+    } else if (r.veille) out += '<p class="note">Le relais n\'est pas encore passé. Il démarre dès que vous quittez la page (ou que vous touchez « Laisser vivre sans moi ») et s\'enchaîne jusqu\'à l\'heure choisie.</p>';
+    if (s?.relais?.enCours) out += '<p class="note"><span class="pos">Le relais travaille en ce moment.</span> Reprendre la main maintenant ferait perdre ses dernières minutes.</p>';
+    out += `<div class="boutons"><button class="btn principal" data-action="relais-partir" ${r.veille ? '' : 'disabled'}>Laisser vivre sans moi</button>
+      <button class="btn danger" data-action="relais-eteindre">Éteindre et effacer mes clés</button></div>`;
     return out;
   }
 
@@ -272,14 +326,22 @@ export class Interface {
     for (const v of liste) {
       out += `<div class="hab ${this.selection === v.id ? 'sel' : ''}" data-hab="${v.id}">
         <span class="pt" style="background:${hex(METIERS[v.metier]?.couleur ?? 0x888888)}"></span>
-        <span><span class="nom">${esc(nomComplet(v))}</span> <small class="note">${v.age} ans · ${esc(libelleMetier(v))}${v.malade ? ' · malade' : ''}</small><span class="etat">${esc(this.etat(v))}</span></span>
+        <span><span class="nom">${esc(nomComplet(v))}</span> <small class="note">${this.agePhrase(v)} · ${esc(libelleMetier(v))}${v.malade ? ' · malade' : ''}</small><span class="etat">${esc(this.etat(v))}</span></span>
         <span class="mini">${barre(v.humeur)}</span></div>`;
     }
     return out + '</div>';
   }
 
+  agePhrase(v) {
+    if (v.age >= 2) return `${v.age} ans`;
+    const mois = moisDepuis(v.naissance, this.sim.temps);
+    return v.age === 1 ? `1 an et ${mois - 12} mois` : `${mois} mois`;
+  }
+
   etat(v) {
     const s = this.sim;
+    if (v.mort) return `Mort${v.genre === 'F' ? 'e' : ''} ${v.mort.cause}`;
+    if (v.nourrisson) return 'Nourrisson, dans les bras de sa famille';
     if (v.statut === 'reflechit') return 'Réfléchit…';
     if (v.statut === 'attend') return v.nbDecisions ? 'Hésite, attend de décider' : 'Se réveille';
     if (v.conversation) {
@@ -302,29 +364,66 @@ export class Interface {
         <p>« ${esc(r.texte)} »</p>
         <form class="parole" data-form="reponse" data-rid="${r.id}"><input name="texte" type="text" maxlength="300" placeholder="Votre réponse…" autocomplete="off"><button class="btn principal" type="submit">Répondre</button><button class="btn" type="button" data-ignorer="${r.id}">Ignorer</button></form></div>`;
     }
-    const closes = s.requetes.filter((r) => r.repondue).slice(-6).reverse();
-    if (closes.length) out += `<h3>Déjà traitées</h3>${closes.map((r) => `<div class="note">• ${esc(s.habitant(r.de).prenom)} : « ${esc(r.texte.slice(0, 90))} » — ${r.reponse ? `réponse : « ${esc(r.reponse.slice(0, 80))} »` : 'sans réponse'}</div>`).join('')}`;
+    // textes entiers : ni la demande ni la réponse ne sont coupées
+    const closes = s.requetes.filter((r) => r.repondue).slice(-8).reverse();
+    if (closes.length) out += `<h3>Déjà traitées</h3>${closes.map((r) => `<div class="carte-bloc"><div><span class="lien" data-hab="${r.de}">${esc(s.habitant(r.de).prenom)}</span> <small class="note">${esc(s.horodatage(r.t))}</small></div><p>« ${esc(r.texte)} »</p><p class="note">${r.reponse ? `<b>Votre réponse :</b> « ${esc(r.reponse)} »` : 'Sans réponse du conseil.'}</p></div>`).join('')}`;
     return out;
   }
 
   // ---------- Paroles ----------
+  // Paroles : tout ce qui sort des habitants — ce qui se dit au village, et leur vie intérieure
+  // (souvenirs, avis sur les autres, qui ils sont, ce qu'ils comprennent), écrits par eux.
   vueParoles() {
     const s = this.sim;
-    let out = `<h3>Ce qui se dit au village</h3>
-      <label class="note"><input type="checkbox" id="voir-pensees" ${this.montrerPensees ? 'checked' : ''}> Montrer aussi les pensées intérieures</label>`;
-    const f = s.flux.filter((x) => this.montrerPensees || x.type !== 'pensee').slice(-90).reverse();
-    if (!f.length) out += `<p class="note">Personne n'a encore parlé.</p>`;
-    for (const x of f) {
+    const f = this.filtreParoles || 'flux';
+    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis et relations'], ['conseil', 'Avis sur le conseil'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['questions', 'Ce qu\'ils se demandent']];
+    let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
+    if (f === 'flux' || f === 'fluxtout') {
+    out += `<p class="note">${f === 'flux' ? 'Seulement ce qui est dit à voix haute.' : 'Tout ce qu\'ils disent et pensent, y compris les pensées de simple routine.'}</p>`;
+    const dits = s.flux.filter((x) => f === 'fluxtout' || x.type !== 'pensee').slice(-90).reverse();
+    if (!dits.length) out += `<p class="note">Personne n'a encore parlé.</p>`;
+    for (const x of dits) {
       const v = x.id >= 0 ? s.habitant(x.id) : null;
       const a = x.a != null ? s.habitant(x.a) : null;
       const qui = x.type === 'conseil' ? 'Le conseil' : v ? `<span class="lien" data-hab="${v.id}">${esc(v.prenom)}</span>` : '';
       const vers = x.type === 'conseil' ? (a ? ` à ${esc(a.prenom)}` : ' à tout le village') : a ? ` à <span class="lien" data-hab="${a.id}">${esc(a.prenom)}</span>` : '';
-      const ton = x.ton && TONS[x.ton] ? ` <small class="note">(${TONS[x.ton]})</small>` : '';
-      out += `<div class="journal-e ${x.type === 'pensee' ? 'pensee-e' : x.ton === 'colere' ? 'mal' : x.type === 'conseil' ? 'conseil' : ''}"><time>${esc(s.horodatage(x.t))}${x.lieu ? ` · ${esc(x.lieu)}` : ''}</time>${qui}${x.type === 'pensee' ? ' pense' : vers + ' :'} « ${esc(x.texte)} »${ton}</div>`;
+      const ton = x.ton && x.ton !== 'calme' ? ` <small class="note">(${esc(TONS[x.ton] || x.ton)})</small>` : '';
+      out += `<div class="journal-e ${x.type === 'pensee' ? 'pensee-e' : /^col[eè]re/.test(x.ton || '') ? 'mal' : x.type === 'conseil' ? 'conseil' : ''}"><time>${esc(s.horodatage(x.t))}${x.lieu ? ` · ${esc(x.lieu)}` : ''}</time>${qui}${x.type === 'pensee' ? ' pense' : vers + ' :'} « ${esc(x.texte)} »${ton}</div>`;
     }
+
+      return out;
+    }
+    out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans « Ce qui se dit ».</p>`;
+    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis' || e.type === 'lien', conseil: (e) => e.type === 'conseil', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons', questions: (e) => e.type === 'questions' }[f] || (() => true);
+    const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
+    if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' || f === 'questions' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
+    const nom = (id) => s.habitant(id)?.prenom || '?';
+    for (const e of liste) {
+      const qui = `<b class="lien">${esc(nom(e.id))}</b>`;
+      const sur = e.sur != null ? esc(nom(e.sur)) : '';
+      const avant = e.avant ? `<small class="note">Avant : « ${esc(e.avant)} »</small>` : '';
+      const ton = e.ton && e.ton !== 'calme' ? ` <small class="note">(${esc(TONS[e.ton] || e.ton)})</small>` : '';
+      const phrase = {
+        pensee: `${qui} pense : « ${esc(e.texte)} »`,
+        parole: `${qui} dit${sur ? ` à ${sur}` : ''} : « ${esc(e.texte)} »${ton}`,
+        souvenir: `${qui} retient : « ${esc(e.texte)} »`,
+        avis: `${qui}, à propos de ${sur} : « ${esc(e.texte)} »${avant}`,
+        demande: `${qui} demande à ${sur} : ${esc(e.texte)}`,
+        lien: `${qui} : pour lui, ${sur} est « ${esc(e.texte)} »${avant}`,
+        conseil: `${qui} sur le conseil : « ${esc(e.texte)} »${avant}`,
+        identite: `${qui} se décrit : « ${esc(e.texte)} »${avant}`,
+        lecons: `${qui} a compris : « ${esc(e.texte)} »${avant}`,
+        questions: `${qui} se demande : « ${esc(e.texte)} »${avant}`,
+        bilan: `${qui}, avant de dormir : « ${esc(e.texte)} »`,
+        requete: `${qui} écrit au conseil : « ${esc(e.texte)} »`,
+      }[e.type] || `${qui} : « ${esc(e.texte)} »`;
+      out += `<div class="journal-e interieur-${e.type}" data-sujet="${e.id}"><time>${esc(s.horodatage(e.t))}</time>${phrase}</div>`;
+    }
+
     return out;
   }
 
+  // Journal : la chronique du village, les événements.
   vueJournal() {
     const s = this.sim;
     let out = `<h3>Chronique du village</h3>`;
@@ -336,9 +435,10 @@ export class Interface {
 
   // ---------- Événements ----------
   clicContenu(e) {
-    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer]');
+    const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer],[data-paroles]');
     if (!t) return;
     const s = this.sim;
+    if (t.dataset.paroles) { this.filtreParoles = t.dataset.paroles; return this.rendreContenu(true); }
     if (t.dataset.hab !== undefined) return this.actions.selectionner(Number(t.dataset.hab), true);
     if (t.dataset.sujet !== undefined) return this.actions.selectionner(Number(t.dataset.sujet), true);
     if (t.dataset.ignorer) s.ignorerRequete(Number(t.dataset.ignorer));
@@ -355,6 +455,9 @@ export class Interface {
     else if (t.dataset.action === 'sauver') this.actions.sauvegarder();
     else if (t.dataset.action === 'charger') this.actions.charger();
     else if (t.dataset.action === 'recommencer') this.actions.recommencer();
+    else if (t.dataset.action === 'relais-partir') this.actions.relais.partir().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this.rendreContenu(true); });
+    else if (t.dataset.action === 'relais-eteindre') this.actions.relais.eteindre().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
+    else if (t.dataset.action === 'oublier-cle') this.penseur?.oublierCle?.(t.dataset.fournisseur);
     this.rendreContenu(true);
     this.rendreFiche(true);
   }
@@ -373,6 +476,22 @@ export class Interface {
     } else if (f.dataset.form === 'annonce') {
       const t = String(d.get('texte') || '').trim();
       if (t) { s.annoncer(t); this.toast('Annonce faite. Chacun l\'entendra à sa prochaine décision.', 'conseil'); }
+    } else if (f.dataset.form === 'relais-code') {
+      const code = String(d.get('code') || '').trim();
+      if (code.length < 8) { this.toast('Le code du village doit avoir au moins 8 caractères.', 'mal'); return; }
+      this.heuresVeille = Number(d.get('heures')) || 10;
+      this.toast('Activation du relais…', 'conseil');
+      this.actions.relais.activer(code, this.heuresVeille).then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
+    } else if (f.dataset.form === 'cle') {
+      const v = String(d.get('cle') || '').trim();
+      const four = f.dataset.fournisseur;
+      if (v) {
+        this.toast('Vérification de la clé…', 'conseil');
+        this.penseur?.enregistrerCle?.(v, four).then((ok) => {
+          this.toast(ok ? 'Clé acceptée.' : (this.penseur?.derniereErreur || 'Clé refusée.'), ok ? 'bien' : 'mal');
+          this.rendreContenu(true);
+        });
+      }
     } else if (f.dataset.form === 'reponse') {
       const t = String(d.get('texte') || '').trim();
       if (t) s.repondreRequete(Number(f.dataset.rid), t);
@@ -385,7 +504,6 @@ export class Interface {
     if (id === 'recherche') { this.filtre.texte = e.target.value; this.rafraichirListe(); }
     else if (id === 'filtre-metier') { this.filtre.metier = e.target.value; this.rafraichirListe(); }
     else if (id === 'tri') { this.filtre.tri = e.target.value; this.rafraichirListe(); }
-    else if (id === 'voir-pensees') { this.montrerPensees = e.target.checked; this.rendreContenu(true); }
   }
 
   rafraichirListe() {
@@ -454,12 +572,14 @@ export class Interface {
     const dlg = (v.dialogue || []).slice(-6);
 
     let html = `<div class="entete"><div><h2>${esc(nomComplet(v))}</h2>
-      <div class="sous">${v.age} ans · ${esc(libelleMetier(v))} · ${esc(foyer?.nom || '')}</div></div>
+      <div class="sous">${this.agePhrase(v)} · ${esc(libelleMetier(v))} · ${esc(foyer?.nom || '')}</div>
+      ${v.mort ? `<div class="sous neg">Mort${F ? 'e' : ''} ${esc(v.mort.cause)}, ${esc(depuis(v.mort.t, s.temps))} (jour ${v.mort.jour}). Sa mémoire reste lisible ci-dessous.</div>` : ''}
+      ${v.enceinte && !v.enceinte.accouche ? `<div class="sous">Attend un enfant (${moisDepuis(v.enceinte.debut, s.temps)} mois sur 9)</div>` : ''}</div>
       <button class="fermer" title="Fermer (Échap)" aria-label="Fermer">✕</button></div>
       <div class="pensee">${v.pensee ? `« ${esc(v.pensee)} »` : `<i>${v.statut === 'reflechit' ? 'Réfléchit…' : 'Pas encore de pensée.'}</i>`}${v.identite ? `<small>Se décrit : ${esc(v.identite)}</small>` : ''}</div>
       <div class="etat-actuel"><b>${esc(this.etat(v))}</b>${v.malade ? ' · <span class="neg">malade</span>' : ''}${v.urgence ? ` · ${esc(v.urgence)}` : ''}</div>
 
-      <h3>Parler à ${esc(v.prenom)}</h3>
+      ${v.mort || v.nourrisson ? `<p class="note">${v.mort ? 'Cet habitant n\'est plus.' : 'Un nourrisson ne décide pas encore : sa famille s\'en occupe.'}</p>` : `<h3>Parler à ${esc(v.prenom)}</h3>
       <div class="dialogue">${(v.conversation || dlg.length) ? '' : `<p class="note">${F ? 'Elle' : 'Il'} vous entendra à sa prochaine décision ; ${F ? 'elle' : 'il'} répondra comme ${F ? 'elle' : 'il'} le veut.</p>`}
         ${dlg.map((d) => `<p class="${d.de === 'conseil' ? 'moi' : 'lui'}"><b>${d.de === 'conseil' ? 'Conseil' : esc(d.de)}</b> ${esc(d.texte)}</p>`).join('')}</div>
       <form class="parole"><input id="parole" type="text" maxlength="300" placeholder="Que voulez-vous lui dire ?" autocomplete="off"><button class="btn" type="submit">Dire</button></form>
@@ -473,6 +593,7 @@ export class Interface {
         <button class="btn danger" data-amende="5" title="5 pièces d'amende">Amende 5</button>
         <button class="btn" data-suivre>Suivre</button></div>
       ${v.age >= 17 && v.age < 64 ? `<div class="metier-sel"><label class="note" for="choix-metier">Confier le métier de</label><select id="choix-metier"><option value="">—</option>${METIERS_ADULTES.map((m) => `<option value="${m}" ${v.metier === m ? 'selected' : ''}>${METIERS[m][F ? 'nomF' : 'nom']}</option>`).join('')}</select></div>` : ''}
+      `}
 
       <h3>Corps</h3>
       ${[['faim', 'Faim (satiété)'], ['soif', 'Soif'], ['energie', 'Forme'], ['sante', 'Santé'], ['securite', 'Sécurité']].map(([k, l]) => `<div class="ligne"><span class="lib">${l}</span>${barre(v.besoins[k])}<span class="val">${Math.round(v.besoins[k])}</span></div>`).join('')}
@@ -487,11 +608,14 @@ export class Interface {
 
       <h3>Mémoire (écrite par ${F ? 'elle' : 'lui'})</h3>
       ${v.resume ? `<div class="note"><b>Bilan :</b> ${esc(v.resume)}</div>` : ''}
+      ${v.lecons ? `<div class="note"><b>Ce qu'il a compris :</b> ${esc(v.lecons)}</div>` : ''}
+      ${v.questions ? `<div class="note"><b>Ce qu'il se demande :</b> ${esc(v.questions)}</div>` : ''}
+      ${v.avisConseil ? `<div class="note"><b>Ce qu'il pense du conseil :</b> ${esc(v.avisConseil.texte)}</div>` : ''}
       ${souvenirs.length ? souvenirs.map((m) => `<div class="souvenir"><i style="background:var(--accent)"></i><span>${esc(m.texte)}<small>${esc(s.horodatage(m.t))}</small></span></div>`).join('') : '<p class="note">Aucun souvenir noté pour l’instant.</p>'}
 
       <h3>Ce qu'${F ? 'elle' : 'il'} pense des autres</h3>
-      ${avis.length ? avis.map(([id, a]) => `<div class="relation"><span class="lien" data-hab="${id}">${esc(s.habitant(Number(id)).prenom)}</span><span class="note">${esc(a.texte)}</span></div>`).join('') : '<p class="note">Pas encore d’avis formulé.</p>'}
-      <h3>Famille</h3>${famille.length ? famille.map((o) => `<div class="relation"><span class="lien" data-hab="${o.id}">${esc(o.prenom)}</span><span class="note">${o.age} ans · ${esc(libelleMetier(o))}</span></div>`).join('') : `<p class="note">Vit seul${F ? 'e' : ''}.</p>`}
+      ${avis.length ? avis.map(([id, a]) => `<div class="relation"><span class="lien" data-hab="${id}">${esc(s.habitant(Number(id)).prenom)}</span><span class="note">${a.lien ? `<b>${esc(a.lien)}</b>${a.texte ? ' · ' : ''}` : ''}${esc(a.texte || '')}</span></div>`).join('') : '<p class="note">Pas encore d’avis formulé.</p>'}
+      <h3>Famille</h3>${famille.length ? famille.map((o) => `<div class="relation"><span class="lien" data-hab="${o.id}">${esc(o.prenom)}</span><span class="note">${o.mort ? `mort${o.genre === 'F' ? 'e' : ''} ${esc(o.mort.cause)}` : `${this.agePhrase(o)} · ${esc(libelleMetier(o))}`}</span></div>`).join('') : `<p class="note">Vit seul${F ? 'e' : ''}.</p>`}
       <p class="note">${v.nbDecisions} décisions · ${v.stats.paroles} paroles · ${Math.round(v.stats.dons)} dons · ${v.stats.prises} prises · ${v.stats.requetes} demandes au conseil</p>`;
     if (el.dataset.cache !== html) {
       const saisie = $('#parole')?.value || '';

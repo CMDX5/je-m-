@@ -26,6 +26,9 @@
       <button data-v="15" title="×15">×15</button>
       <button data-v="60" title="×60">×60</button>
     </div>
+    <button id="voir-pensees" class="actif" type="button" aria-label="Afficher ou masquer les pensées">💭</button>
+    <span id="date-village" class="pastille" title="Date du village : une année dure deux jours">nov. 2026</span>
+    <button id="veille-ecran" type="button" aria-label="Garder l'écran allumé" title="Garder l'écran allumé : le village continue de vivre tant que cette page reste ouverte" hidden>🔆</button>
     <div id="ressources"></div>
     <div id="jauges"></div>
   </header>
@@ -61,15 +64,24 @@
       <h1>Palestine — Île Vivante</h1>
       <p class="sous">Une île côtière de la Méditerranée. Cinquante habitants. Un conseil : vous.</p>
       <p>Personne ici n'a été programmé pour penser. Chaque habitant a un corps (faim, soif, fatigue, santé), un foyer, de l'argent, une famille, des voisins, un métier. Le reste — ce qu'il pense, ce qu'il dit, ce qu'il décide, ce qu'il retient, qui il apprécie ou non — vient de lui : chacun pense avec un modèle de langage, en français.</p>
-      <p>En ligne, ils pensent seuls, en continu, avec un modèle gratuit de Groq : il suffit d'une clé gratuite, demandée au premier lancement. Sur claude.ai, ils pensent avec Claude quand vous touchez « Laisser réfléchir ». Sur un ordinateur, le jeu peut aussi utiliser <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>.</p>
+      <p>En ligne, ils pensent seuls, en continu, avec les modèles gratuits de Groq et de Google Gemini : il suffit d'une clé gratuite, demandée au premier lancement (avec les deux, ils pensent plus longtemps chaque jour). Sur claude.ai, ils pensent avec Claude quand vous touchez « Laisser réfléchir ». Sur un ordinateur, le jeu peut aussi utiliser <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>.</p>
       <ul>
-        <li><b>Observer</b> : cliquez sur un habitant pour lire ses pensées et ses souvenirs, tels qu'il les écrit.</li>
+        <li><b>Observer</b> : leurs paroles et leurs pensées (💭) s'affichent au-dessus de leur tête ; approchez la caméra pour voir leurs prénoms. Au-dessus des bâtiments, on voit qui est à l'intérieur. Touchez un habitant pour lire ses souvenirs.</li>
         <li><b>Parler</b> : adressez-vous à lui ; il décide quoi répondre, ou s'il vous répond.</li>
         <li><b>Gouverner</b> : fixez salaires et prix, financez, sanctionnez, annoncez, ouvrez des chantiers, répondez à leurs demandes.</li>
       </ul>
       <p class="petit">Caméra : glisser pour tourner, clic droit pour se déplacer, molette pour zoomer · Double-clic sur un habitant pour le suivre · Espace : pause · Échap : désélectionner</p>
       <button id="commencer" class="principal">Entrer sur l'île</button>
       <p class="petit avertissement">Les habitants sont fictifs : leurs pensées sont produites par un modèle de langage, ils n'ont pas de conscience réelle.</p>
+    </div>
+  </div>
+
+  <div id="veille-plein" hidden>
+    <div class="carte">
+      <h2>Le village vit sans vous</h2>
+      <p>Les habitants continuent de penser et de vivre sur le serveur, avec les modèles gratuits dont vous avez confié les clés. Vous pouvez fermer cette page et dormir.</p>
+      <p class="petit">En revenant, vous retrouverez le village tel qu'il sera devenu, avec un résumé de ce qui s'est passé.</p>
+      <button id="reprendre-main" class="principal" type="button">Reprendre la main</button>
     </div>
   </div>
 

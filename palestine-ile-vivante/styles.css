@@ -239,3 +239,29 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
   #toasts { top: auto; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); width: calc(100vw - 24px); }
   .toast { max-width: 100%; }
 }
+
+/* Journal : vie intérieure */
+.filtres-journal { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.filtres-journal .btn.actif { background: var(--or, #e6b450); color: #1c1a16; border-color: transparent; }
+.journal-e small.note { display: block; margin-top: 2px; }
+.journal-e .lien { cursor: pointer; }
+.interieur-identite, .interieur-lecons { border-left: 3px solid var(--or, #e6b450); padding-left: 8px; }
+.interieur-avis { border-left: 3px solid #7ac0b0; padding-left: 8px; }
+.interieur-requete { border-left: 3px solid #d0705a; padding-left: 8px; }
+
+#voir-pensees { border: 1px solid var(--bord); background: rgba(255,255,255,0.07); border-radius: 8px; padding: 4px 9px; font-size: 16px; opacity: 0.55; }
+#voir-pensees.actif { opacity: 1; background: rgba(230,180,80,0.25); }
+.interieur-questions { border-left: 3px solid #b48ae0; padding-left: 8px; }
+#date-village { font-weight: 600; color: var(--texte, #eee); white-space: nowrap; }
+.alerte-stat { outline: 1px solid var(--rouge, #d0705a); }
+.alerte-stat b { color: var(--rouge, #d0705a); }
+.interieur-lien { border-left: 3px solid #7ac0b0; padding-left: 8px; }
+.interieur-conseil { border-left: 3px solid #d0705a; padding-left: 8px; }
+#veille-ecran { border: 1px solid var(--bord); background: rgba(255,255,255,0.07); border-radius: 8px; padding: 4px 9px; font-size: 16px; opacity: 0.55; }
+#veille-ecran.actif { opacity: 1; background: rgba(230,180,80,0.25); }
+
+#veille-plein { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 14, 20, 0.92); }
+#veille-plein[hidden] { display: none; }
+#veille-plein .carte { max-width: 420px; background: var(--fond-carte, #23211c); border: 1px solid var(--bord); border-radius: 14px; padding: 20px; text-align: left; }
+#veille-plein h2 { margin: 0 0 10px; }
+#veille-plein .petit { opacity: .7; font-size: 13px; }

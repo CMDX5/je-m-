@@ -32,9 +32,31 @@ function echantillon(h) {
   return echantillon(0);
 }
 
+// ---------- Pluie : des traits qui tombent autour de la caméra ----------
+const NB_GOUTTES = 3200, BOITE = 70, HAUT = 55;
+function creerPluie(scene) {
+  const pos = new Float32Array(NB_GOUTTES * 6);
+  const base = [];
+  for (let i = 0; i < NB_GOUTTES; i++) base.push({ x: (Math.random() - 0.5) * 2 * BOITE, y: Math.random() * HAUT, z: (Math.random() - 0.5) * 2 * BOITE, v: 38 + Math.random() * 18 });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.LineBasicMaterial({ color: 0xbcd0e0, transparent: true, opacity: 0, fog: false, depthWrite: false });
+  const lignes = new THREE.LineSegments(geo, mat);
+  lignes.frustumCulled = false;
+  lignes.visible = false;
+  lignes.renderOrder = 5;
+  scene.add(lignes);
+  return { lignes, base, pos, geo, mat };
+}
+
 export class Environment {
   constructor(scene, renderer) {
     this.scene = scene;
+    this.pluie = creerPluie(scene);
+    this.dernierT = 0;
+    this.cleSaison = '';
+    this.terrain = null;
+    this.vegetation = [];
     // Ciel : dôme avec dégradé
     this.skyUniforms = { zenith: { value: C(0x3f8ad6) }, horizon: { value: C(0xd8ecf6) } };
     const sky = new THREE.Mesh(
@@ -118,8 +140,46 @@ export class Environment {
     this.nuit = 0;
   }
 
-  update(heure, temps, meteo) {
+  // Le terrain et la végétation à colorer selon la saison (appelé une fois, au chargement)
+  brancher(terrain, vegetation) { this.terrain = terrain; this.vegetation = vegetation || []; }
+
+  // Vert après la pluie, jaune à la saison sèche : une teinte, sans toucher aux couleurs de base.
+  appliquerSaison(sec, verdure) {
+    const cle = `${Math.round(sec * 40)}-${Math.round(verdure * 40)}`;
+    if (cle === this.cleSaison) return;
+    this.cleSaison = cle;
+    const SEC = C(0xb59a58), LUXURIANT = C(0x6fbf4a);
+    for (const { mat, base } of this.vegetation) mat.color.copy(base).lerp(SEC, 0.7 * sec).lerp(LUXURIANT, 0.28 * verdure);
+    if (this.terrain) this.terrain.material.color.setRGB(1 + 0.14 * sec - 0.06 * verdure, 1 - 0.03 * sec + 0.05 * verdure, 1 - 0.24 * sec - 0.06 * verdure);
+  }
+
+  majPluie(intensite, temps, camera) {
+    const P = this.pluie;
+    const visible = intensite > 0.01;
+    P.lignes.visible = visible;
+    if (!visible) return;
+    const dt = Math.min(0.1, Math.max(0, temps - this.dernierT));
+    const cx = camera ? camera.position.x : 0, cz = camera ? camera.position.z : 0;
+    const cy = camera ? Math.max(0, camera.position.y - 30) : 0;
+    const n = Math.floor(NB_GOUTTES * (0.25 + 0.75 * intensite));
+    for (let i = 0; i < NB_GOUTTES; i++) {
+      const g = P.base[i];
+      g.y -= g.v * dt;
+      if (g.y < 0) g.y += HAUT;
+      const j = i * 6;
+      if (i >= n) { P.pos[j] = P.pos[j + 3] = P.pos[j + 1] = P.pos[j + 4] = P.pos[j + 2] = P.pos[j + 5] = 0; continue; }
+      const x = cx + ((g.x + BOITE) % (2 * BOITE)) - BOITE, z = cz + ((g.z + BOITE) % (2 * BOITE)) - BOITE, y = cy + g.y;
+      P.pos[j] = x; P.pos[j + 1] = y; P.pos[j + 2] = z;
+      P.pos[j + 3] = x + 0.18; P.pos[j + 4] = y + 1.7; P.pos[j + 5] = z + 0.06;
+    }
+    P.geo.attributes.position.needsUpdate = true;
+    P.mat.opacity = 0.42 * intensite;
+  }
+
+  update(heure, temps, meteo, camera = null) {
     const s = echantillon(heure);
+    const m = typeof meteo === 'object' && meteo ? meteo : { tempete: meteo === 'tempete' };
+    const pluie = m.intensitePluie ?? m.pluie ?? 0, chaud = m.chaleur || 0;
     // Trajectoire du soleil (lever 6h, coucher ~19h45)
     const jourT = (heure - 6) / 13.75;
     const elev = Math.sin(Math.PI * Math.min(1, Math.max(0, jourT)));
@@ -132,23 +192,29 @@ export class Environment {
     this.sunDisc.visible = jourT > -0.02 && jourT < 1.02;
     this.sunDisc.material.color.copy(s.soleil).lerp(C(0xffffff), 0.3);
 
-    let orage = meteo === 'tempete' ? 1 : 0;
-    const zen = s.zenith.clone().lerp(C(0x4a5560), orage * 0.6);
-    const hor = s.horizon.clone().lerp(C(0x8a9098), orage * 0.6);
+    // gris : l'orage et la pluie couvrent le ciel
+    const orage = Math.max(m.tempete ? 1 : 0, pluie * 0.9);
+    const jour = Math.min(1, Math.max(0, s.intensite / 0.9));
+    const zen = s.zenith.clone().lerp(C(0x4a5560), orage * 0.6).lerp(C(0x7fa0c0), chaud * 0.22 * jour * (1 - orage));
+    const hor = s.horizon.clone().lerp(C(0x8a9098), orage * 0.6).lerp(C(0xf2d9a0), chaud * 0.4 * jour * (1 - orage));
     this.skyUniforms.zenith.value.copy(zen);
     this.skyUniforms.horizon.value.copy(hor);
     this.scene.fog.color.copy(hor);
-    this.scene.fog.near = orage ? 90 : 220;
-    this.scene.fog.far = orage ? 380 : 700;
+    // la brume de chaleur raccourcit un peu l'horizon
+    this.scene.fog.near = orage ? 90 : 220 - 70 * chaud * jour;
+    this.scene.fog.far = orage ? 380 : 700 - 190 * chaud * jour;
 
     this.sun.color.copy(s.soleil);
-    this.sun.intensity = s.intensite * (orage ? 0.4 : 1);
-    this.hemi.intensity = s.ambiance * (orage ? 0.8 : 1);
+    this.sun.intensity = s.intensite * (orage ? 1 - 0.6 * orage : 1 + 0.1 * chaud);
+    this.hemi.intensity = s.ambiance * (1 - 0.2 * orage);
     this.hemi.color.copy(hor).lerp(C(0xffffff), 0.4);
     this.nuit = 1 - Math.min(1, Math.max(0, s.intensite / 0.9));
     this.moon.intensity = this.nuit * 0.45;
-    this.stars.material.opacity = Math.max(0, this.nuit - 0.3) * (orage ? 0.1 : 1);
+    this.stars.material.opacity = Math.max(0, this.nuit - 0.3) * (1 - 0.9 * orage);
     this.waterUniforms.uTime.value = temps;
     this.water.material.color.set(0x1c6e8c).lerp(C(0x0a2236), this.nuit * 0.7).lerp(C(0x3a5560), orage * 0.5);
+    this.appliquerSaison(m.seche || 0, m.verdure ?? 0.5);
+    this.majPluie(pluie, temps, camera);
+    this.dernierT = temps;
   }
 }

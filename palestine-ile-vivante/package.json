@@ -3,12 +3,16 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Simulation 3D d'un village insulaire où chaque habitant pense avec un modèle de langage (Three.js + Ollama/Claude)",
+  "description": "Simulation 3D d'un village insulaire où chaque habitant pense avec un modèle de langage (Three.js + Groq/Gemini/Ollama/Claude)",
   "scripts": {
     "start": "node tools/serve.mjs",
-    "test": "node tests/simulation.test.mjs && node tests/serveur.test.mjs && node tests/groq.test.mjs"
+    "test": "node tests/simulation.test.mjs && node tests/serveur.test.mjs && node tests/groq.test.mjs && node tests/vie.test.mjs && node tests/saison.test.mjs && node tests/economie.test.mjs && node tests/social.test.mjs && node tests/api.test.mjs && node tests/relais.test.mjs"
   },
   "optionalDependencies": {
     "@anthropic-ai/sdk": "^1.12.0"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.9.0",
+    "@vercel/functions": "^3.11.3"
   }
 }

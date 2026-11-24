@@ -32,6 +32,7 @@ export const METIERS = {
   eleve: { nom: 'Élève', nomF: 'Élève', couleur: 0xd9b44a, lieu: 'ecole' },
   enfant: { nom: 'Enfant', nomF: 'Enfant', couleur: 0xe0a060, lieu: null },
   ancien: { nom: 'Ancien', nomF: 'Ancienne', couleur: 0x9a8c98, lieu: null },
+  sansmetier: { nom: 'Sans métier', nomF: 'Sans métier', couleur: 0xb0a89a, lieu: null },
 };
 
 // Métiers que le conseil peut confier à un adulte.
@@ -58,9 +59,10 @@ export const LIEUX = {
 };
 
 export const PROJETS = {
-  puits: { nom: 'Puits communal', cout: { pierre: 40, bois: 10 }, travail: 60, effet: 'Eau potable : moins de maladies' },
+  puits: { nom: 'Puits communal', cout: { pierre: 40, bois: 10 }, travail: 60, effet: 'Eau potable : moins de maladies, et les jarres des maisons se remplissent peu à peu' },
   maison: { nom: 'Nouvelle maison', cout: { pierre: 60, bois: 30 }, travail: 110, effet: 'Une maison libre où s’installer' },
   jetee: { nom: 'Jetée agrandie', cout: { pierre: 35, bois: 35 }, travail: 80, effet: 'Deux places de pêche en plus' },
+  halle: { nom: 'Halle ombragée du marché', cout: { bois: 30, pierre: 15 }, travail: 70, effet: 'Un abri frais au marché : on y a moins soif par forte chaleur' },
   ecole: { nom: "Agrandissement de l'école", cout: { pierre: 50, bois: 25 }, travail: 90, effet: 'Plus de place pour apprendre' },
 };
 

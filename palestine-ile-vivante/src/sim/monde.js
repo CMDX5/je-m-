@@ -37,9 +37,11 @@ export function produire(lieu, m, h, meteo, comp, dt, rendement = 1) {
   const k = (dt / 60) * (0.6 + 0.8 * comp) * rendement;
   switch (lieu) {
     case 'champs': {
-      const r = 4.5 * L * m.fertilite * (meteo.secheresse ? 0.5 : 1) * k;
+      // la terre rend le plus après la pluie, le moins à la fin de la saison sèche ; sous la pluie, on travaille mal
+      const saisonF = meteo.pluie ? 0.85 : 1.4 - 0.75 * (meteo.seche || 0);
+      const r = 4.5 * L * m.fertilite * (meteo.secheresse ? 0.5 : 1) * saisonF * k;
       m.fertilite = clamp(m.fertilite - r * 0.0005, 0.1, 1);
-      return { nourriture: r, fatigue: 1.3 + chaleur(h) };
+      return { nourriture: r, fatigue: 1.3 + chaleur(h) * (1 + 0.8 * (meteo.chaleurSaison || 0)) };
     }
     case 'jetee': {
       if (meteo.tempete) return { fatigue: 1.6, danger: 0.004 * dt };
@@ -49,11 +51,11 @@ export function produire(lieu, m, h, meteo, comp, dt, rendement = 1) {
       return { nourriture: r, fatigue: 1.2 };
     }
     case 'oliveraie': {
-      const r = 2.0 * L * m.olives * k;
+      const r = 2.0 * L * m.olives * (meteo.pluie ? 0.85 : 0.9 + 0.3 * (1 - (meteo.seche || 0))) * k;
       m.olives = clamp(m.olives - r * 0.002, 0, 1);
       return { nourriture: r * 0.8, huile: r * 0.5, fatigue: 1.1 };
     }
-    case 'carriere': return { pierre: 1.0 * L * k, fatigue: 1.7 + chaleur(h) };
+    case 'carriere': return { pierre: 1.0 * L * k, fatigue: 1.7 + chaleur(h) * (1 + 0.8 * (meteo.chaleurSaison || 0)) };
     case 'pinede': {
       const r = 1.0 * L * m.foret * k;
       m.foret = clamp(m.foret - r * 0.0018, 0.02, 1);
@@ -63,7 +65,7 @@ export function produire(lieu, m, h, meteo, comp, dt, rendement = 1) {
     case 'marche': return { pieces: 0.6 * k, fatigue: 0.6 };
     case 'dispensaire': return { remedes: 0.25 * k, fatigue: 0.8 };
     case 'ecole': return { fatigue: 0.9 };
-    case 'chantier': return { chantier: 1.2 * k, fatigue: 1.6 + chaleur(h) };
+    case 'chantier': return { chantier: 1.2 * k, fatigue: 1.6 + chaleur(h) * (1 + 0.8 * (meteo.chaleurSaison || 0)) };
     default: return { fatigue: 0.3 };
   }
 }
@@ -79,9 +81,9 @@ export function pressionCircadienne(h) {
 }
 
 // Probabilité quotidienne de tomber malade : faim, soif, épuisement, âge et eau non potable.
-export function risqueMaladie(v, bonus) {
+export function risqueMaladie(v, bonus, chaleurSaison = 0) {
   const b = v.besoins;
-  return 0.005 + (b.faim < 25 ? 0.03 : 0) + (b.soif < 25 ? 0.03 : 0) + (b.energie < 20 ? 0.02 : 0) + (v.age > 65 ? 0.01 : 0) + (bonus.puits ? -0.003 : 0.003);
+  return 0.005 + 0.004 * chaleurSaison + (b.faim < 25 ? 0.03 : 0) + (b.soif < 25 ? 0.03 : 0) + (b.energie < 20 ? 0.02 : 0) + (v.age > 65 ? 0.01 : 0) + (bonus.puits ? -0.003 : 0.003);
 }
 
 // Confort d'un foyer : le nombre de couchages face au nombre d'occupants.
