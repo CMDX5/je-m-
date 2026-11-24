@@ -2,7 +2,7 @@
 // Tout passe par le code du village (choisi par le joueur) ; les clés ne sont jamais renvoyées.
 // Corps de requête : l'état du village compressé (gzip), facultatif. Réglages dans l'en-tête x-reglages (JSON).
 import { gunzipSync } from 'node:zlib';
-import { modifier, vueDoc, docVide, codeValide, creerAcces, DUREE_BAIL_MS, CODE_MIN } from './_village.js';
+import { modifier, vueDoc, docVide, codeValide, creerAcces, demarrerChaine, abandonnerChaine, dependances, DUREE_BAIL_MS, CODE_MIN } from './_village.js';
 
 const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 const MAX_ETAT = 6 * 1024 * 1024;
@@ -75,7 +75,18 @@ export default async function handler(req, res) {
 
     if (r.refus === 403) { await attendre(500); return res.status(403).json({ erreur: 'code du village incorrect' }); }
     if (r.refus === 409) return res.status(409).json({ erreur: 'une autre page tient déjà le village', ...r.vue });
-    return res.status(200).json({ ...r.vue, ...(r.etat ? { etat: r.etat } : {}) });
+    // la page s'en va en confiant le village : le relais de nuit démarre tout de suite
+    let relais = null;
+    if (action === 'deposer' && reglages.liberer && r.vue?.veille) {
+      try {
+        const d = await demarrerChaine({ maintenant: Date.now() });
+        relais = { demarre: d.fait, raison: d.raison };
+        if (d.fait) {
+          try { await dependances.envoyer(d.corps, req.headers.host); } catch (e) { await abandonnerChaine(d.corps.chaineId); throw e; }
+        }
+      } catch (e) { console.error('ETAT relais', e?.message); relais = { demarre: false, raison: 'erreur' }; }
+    }
+    return res.status(200).json({ ...r.vue, ...(r.etat ? { etat: r.etat } : {}), ...(relais ? { relaisLance: relais } : {}) });
   } catch (e) {
     console.error('ETAT erreur', e?.name, e?.message);
     return res.status(503).json({ erreur: 'stockage du village indisponible pour le moment' });

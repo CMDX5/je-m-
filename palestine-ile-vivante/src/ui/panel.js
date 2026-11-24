@@ -299,7 +299,8 @@ export class Interface {
     if (s?.relais?.dernier) {
       const x = s.relais;
       out += `<p class="note">Dernier passage du relais ${il(x.dernier)} : ${x.raison ? esc(x.raison) : `${dureeFrancaiseUI(x.minutesJeu || 0)} de jeu, ${x.decisions ?? 0} décisions${x.deces ? `, ${x.deces} décès` : ''}${x.naissances ? `, ${x.naissances} naissance(s)` : ''}${x.arret === 'quotas' ? ' (arrêté : quotas gratuits épuisés)' : ''}`}. Au total : ${dureeFrancaiseUI(x.minutesJeuTotal || 0)} de jeu hors de la page.</p>`;
-    } else if (r.veille) out += '<p class="note">Le relais n\'est pas encore passé. Il se déclenche environ toutes les 15 minutes, une fois la page quittée.</p>';
+    } else if (r.veille) out += '<p class="note">Le relais n\'est pas encore passé. Il démarre dès que vous quittez la page (ou que vous touchez « Laisser vivre sans moi ») et s\'enchaîne jusqu\'à l\'heure choisie.</p>';
+    if (s?.relais?.enCours) out += '<p class="note"><span class="pos">Le relais travaille en ce moment.</span> Reprendre la main maintenant ferait perdre ses dernières minutes.</p>';
     out += `<div class="boutons"><button class="btn principal" data-action="relais-partir" ${r.veille ? '' : 'disabled'}>Laisser vivre sans moi</button>
       <button class="btn danger" data-action="relais-eteindre">Éteindre et effacer mes clés</button></div>`;
     return out;

@@ -5,8 +5,8 @@ import { gzipSync } from 'node:zlib';
 import { Simulation } from '../src/sim/simulation.js';
 import { faireVivre } from '../src/sim/relais.js';
 import etat from '../api/etat.js';
-import veille from '../api/veille.js';
-import { definirMagasin, lancerRelais, INTERVALLE_RELAIS_MS } from '../api/_village.js';
+import { creerHandler } from '../api/veille.js';
+import { definirMagasin, demarrerChaine, executerMaillon, signer, signatureValide, dependances, POINT_MS } from '../api/_village.js';
 
 // ---- stockage simulé ----
 function faussMagasin() {
@@ -24,7 +24,10 @@ function faussMagasin() {
   return m;
 }
 const res = () => { const r = { setHeader() {}, status(c) { r.code = c; return r; }, json(j) { r.body = j; return r; } }; return r; };
+const erreurOrigine = console.error;
+console.error = (...a) => { if (!String(a[0]).startsWith('ETAT relais')) erreurOrigine(...a); }; // les échecs simulés sont attendus
 const CODE = 'mon-village-2026';
+dependances.envoyer = async () => { throw new Error('pas de réseau dans les tests'); }; // le premier passage ne part pas : voir la section 5
 async function appeler(action, { code = CODE, client = 'page-A', reglages, sim } = {}) {
   const headers = { 'x-code': code, 'x-action': action, 'x-client': client, ...(reglages ? { 'x-reglages': JSON.stringify(reglages) } : {}) };
   const r = res();
@@ -112,56 +115,158 @@ const nouveauVillage = () => { const s = new Simulation({ seed: 5 }).init(); s.u
   const get = res(); await etat({ method: 'GET', headers: {} }, get); assert.equal(get.code, 405);
 }
 
-// ======== 3. lancer le relais : seulement quand il le faut ========
+// ======== 3. la chaîne de passages ========
+// fait tourner tous les passages d'une chaîne, chacun « 5 minutes » après le précédent, jusqu'à la fin
+async function chaine(corpsDepart, { debutMs, transport, avantPassage, budgetMs = 100000 } = {}) {
+  const h = horlogeRapide();
+  let corps = corpsDepart, hop = 0, dernier = null, maintenant = debutMs;
+  while (corps && hop < 60) {
+    if (avantPassage) await avantPassage(hop);
+    let suite = null;
+    dernier = await executerMaillon(corps, { maintenant: () => maintenant, transport, budgetMs, suivant: async (c) => { suite = c; }, ...h });
+    corps = suite; hop++; maintenant += 5 * 60000;
+  }
+  return { dernier, passages: hop };
+}
+async function prepare(sim, reglages = {}) {
+  const m = faussMagasin(); definirMagasin(m);
+  await appeler('prendre');
+  await appeler('deposer', { sim, reglages: { idPartie: 'p1', veille: true, heures: 1, cles: { groq: 'gsk_x' }, liberer: true, ...reglages } });
+  return m;
+}
+
 {
+  const sim = nouveauVillage();
+  const maintenant = Date.now();
+  definirMagasin(faussMagasin());
+  assert.equal((await demarrerChaine({ maintenant })).raison, 'aucun village');
+  let m = await prepare(sim, { veille: false });
+  assert.equal((await demarrerChaine({ maintenant })).raison, 'veille éteinte');
+  m = await prepare(sim, { cles: { groq: '', gemini: '' } });
+  assert.equal((await demarrerChaine({ maintenant })).raison, 'aucune clé');
+  m = await prepare(sim); await appeler('prendre', { client: 'page-A' });
+  assert.equal((await demarrerChaine({ maintenant })).raison, 'la page est ouverte', 'jamais en même temps que la page');
+  assert.equal((await demarrerChaine({ maintenant: maintenant + 2 * 3600e3 })).raison, 'veille éteinte', 'la veille s\'éteint à l\'heure choisie');
+}
+{
+  // une chaîne complète : une heure de veille, un passage toutes les 5 minutes
+  const sim = nouveauVillage();
+  const m = await prepare(sim);
+  const t0 = m.brut().temps, debutMs = Date.now();
+  const ecrituresAvant = m.ecritures;
+  const d = await demarrerChaine({ maintenant: debutMs });
+  assert.equal(d.fait, true);
+  assert.equal((await demarrerChaine({ maintenant: debutMs + 1000 })).raison, 'le relais travaille déjà', 'une seule chaîne à la fois');
+  const { dernier, passages } = await chaine(d.corps, { debutMs, transport: transportOk() });
+  assert.ok(passages >= 10 && passages <= 14, `les passages s'enchaînent (${passages})`);
+  assert.equal(dernier.fin, true); assert.equal(dernier.raison, 'heure atteinte');
+  const doc = m.brut();
+  assert.ok(doc.temps > t0 + 120, `le village a vécu pendant ce temps (${Math.round(doc.temps - t0)} minutes de jeu)`);
+  assert.ok(doc.relais.minutesJeu > 120 && doc.relais.decisions > 100, 'cumul des passages');
+  assert.equal(doc.relais.chaine, null, 'chaîne terminée');
+  const ecritures = m.ecritures - ecrituresAvant;
+  assert.ok(ecritures <= 6, `peu d'écritures malgré ${passages} passages : ${ecritures} (le stockage gratuit les compte)`);
+  assert.ok(Simulation.charger(doc.etat).habitants.length >= 45, 'le village est intact');
+}
+{
+  // la page revient en cours de route : le relais s'arrête sans rien écraser
+  const sim = nouveauVillage();
+  const m = await prepare(sim, { heures: 10 });
+  const debutMs = Date.now();
+  const d = await demarrerChaine({ maintenant: debutMs });
+  let majAvant = null;
+  const r = await chaine(d.corps, { debutMs, transport: transportOk(), avantPassage: async (hop) => { if (hop === 3) { await appeler('prendre', { client: 'page-A' }); majAvant = m.brut().majA; } } });
+  assert.equal(r.dernier.fin, true); assert.equal(r.dernier.raison, 'la page a repris la main');
+  assert.equal(m.brut().majA, majAvant, 'rien n\'a été écrit par le relais après la reprise');
+  assert.equal(m.brut().bail.id, 'page-A');
+}
+{
+  // la page reprend la main en écrivant elle-même pendant qu'un passage travaille : le travail du passage est abandonné
+  const sim = nouveauVillage();
+  const m = await prepare(sim, { heures: 10 });
+  const debutMs = Date.now();
+  const d = await demarrerChaine({ maintenant: debutMs });
+  const h = horlogeRapide();
+  const r = await executerMaillon({ ...d.corps, dernierPoint: debutMs - POINT_MS - 1000 }, {
+    maintenant: () => debutMs, transport: transportOk(), budgetMs: 50000, suivant: async () => {},
+    faire: async (o) => { const doc = m.brut(); m.ecrireAilleurs({ ...doc, majA: 777 }); return faireVivre(o); }, ...h,
+  });
+  assert.equal(r.raison, 'la page a repris la main');
+  assert.equal(m.brut().majA, 777, 'ce que la page a écrit est intact');
+}
+{
+  // quotas du jour épuisés : la chaîne s'arrête et enregistre
+  const sim = nouveauVillage();
+  const m = await prepare(sim, { heures: 10 });
+  const debutMs = Date.now();
+  const d = await demarrerChaine({ maintenant: debutMs });
+  const transport = { modeles: async () => ({ ok: true, status: 200, json: async () => modelesOk }), pensee: async () => ({ ok: false, status: 429, json: async () => ({ attente: 3600, quota: {} }) }) };
+  const h = horlogeRapide();
+  const r = await executerMaillon(d.corps, { maintenant: () => debutMs, transport, budgetMs: 200000, suivant: async () => { throw new Error('ne doit pas continuer'); }, ...h });
+  assert.equal(r.fin, true); assert.equal(r.raison, 'quotas gratuits épuisés');
+  assert.equal(m.brut().relais.chaine, null);
+  assert.equal(m.brut().relais.arret, 'quotas');
+}
+{
+  // le passage suivant est refusé : le village est enregistré tel quel
+  const sim = nouveauVillage();
+  const m = await prepare(sim, { heures: 10 });
+  const debutMs = Date.now(); const t0 = m.brut().temps;
+  const d = await demarrerChaine({ maintenant: debutMs });
+  const r = await executerMaillon(d.corps, { maintenant: () => debutMs, transport: transportOk(), budgetMs: 60000, suivant: async () => { throw new Error('réseau'); }, ...horlogeRapide() });
+  assert.equal(r.raison, 'relais interrompu');
+  assert.ok(m.brut().temps > t0, 'rien n\'est perdu');
+}
+
+// ======== 4. signature et point d'accès « veille » ========
+{
+  const corps = { chaineId: 'abc', etat: 'x', hop: 1 };
+  const sig = signer(corps);
+  assert.equal(signatureValide(corps, sig), true);
+  assert.equal(signatureValide({ ...corps, hop: 2 }, sig), false, 'un corps modifié est refusé');
+  assert.equal(signatureValide(corps, 'x'.repeat(64)), false);
+  assert.equal(signatureValide(corps, undefined), false);
+
+  const lances = [];
+  const handler = creerHandler({ attendre: (p) => lances.push(p), traiter: async () => {} });
+  let r = res(); await handler({ method: 'POST', headers: { 'x-chaine': 'faux' }, body: corps }, r); assert.equal(r.code, 401, 'sans signature valable, rien ne démarre');
+  r = res(); await handler({ method: 'POST', headers: { 'x-chaine': sig }, body: corps }, r); assert.equal(r.code, 202); assert.equal(lances.length, 1);
+  definirMagasin(faussMagasin());
+  r = res(); await handler({ method: 'GET', headers: {} }, r); assert.equal(r.code, 200); assert.equal(r.body.raison, 'aucun village');
+  const m = await prepare(nouveauVillage());
+  r = res(); await handler({ method: 'GET', headers: {} }, r); assert.equal(r.code, 202, 'un appel sans signature démarre une chaîne si tout est réuni'); assert.equal(lances.length, 2);
+  r = res(); await handler({ method: 'GET', headers: {} }, r); assert.equal(r.body.raison, 'le relais travaille déjà');
+}
+
+// ======== 5. le départ de la page lance la chaîne ========
+{
+  const envoyes = [];
+  const avant = dependances.envoyer;
+  dependances.envoyer = async (corps, hote) => { envoyes.push({ corps, hote }); };
   const m = faussMagasin(); definirMagasin(m);
   const sim = nouveauVillage();
-  const h = horlogeRapide();
-  const maintenant = Date.now();
-  let r = await lancerRelais({ maintenant, transport: transportOk(), ...h });
-  assert.equal(r.raison, 'aucun village');
   await appeler('prendre');
-  await appeler('deposer', { sim, reglages: { veille: false, cles: { groq: 'gsk_x' }, liberer: true } });
-  r = await lancerRelais({ maintenant, transport: transportOk(), ...h }); assert.equal(r.raison, 'veille éteinte');
-  await appeler('reglages', { reglages: { veille: true } });
-  await appeler('prendre', { client: 'page-A' });
-  r = await lancerRelais({ maintenant, transport: transportOk(), ...h }); assert.equal(r.raison, 'la page est ouverte', 'jamais en même temps que la page');
-  await appeler('deposer', { client: 'page-A', reglages: { liberer: true, veille: true, heures: 2 } });
-  r = await lancerRelais({ maintenant: maintenant + 3 * 3600e3, transport: transportOk(), ...h }); assert.equal(r.raison, 'veille éteinte', 'la veille s\'éteint après le délai choisi');
-  const sansCle = faussMagasin(); definirMagasin(sansCle); await appeler('prendre'); await appeler('deposer', { sim, reglages: { veille: true, liberer: true } });
-  r = await lancerRelais({ maintenant, transport: transportOk(), ...h }); assert.equal(r.raison, 'aucune clé');
-
-  // le cas qui marche
-  const m2 = faussMagasin(); definirMagasin(m2);
-  await appeler('prendre'); await appeler('deposer', { sim, reglages: { idPartie: 'p1', veille: true, heures: 10, cles: { groq: 'gsk_x' }, liberer: true } });
-  const t0 = m2.brut().temps;
-  r = await lancerRelais({ maintenant, transport: transportOk(), budgetMs: 100000, ...h });
-  assert.equal(r.fait, true); assert.ok(r.minutesJeu > 60);
-  assert.ok(m2.brut().temps > t0 + 60, 'le village a avancé pendant que la page était fermée');
-  assert.equal(m2.brut().relais.dernier, maintenant);
-  r = await lancerRelais({ maintenant: maintenant + 60000, transport: transportOk(), ...h }); assert.equal(r.raison, 'trop tôt', 'pas deux relais coup sur coup');
-  r = await lancerRelais({ maintenant: maintenant + INTERVALLE_RELAIS_MS + 1000, transport: transportOk(), budgetMs: 100000, ...h }); assert.equal(r.fait, true, 'puis il reprend');
-
-  // la page revient pendant que le relais travaille : son travail est abandonné, jamais l'inverse
-  const m3 = faussMagasin(); definirMagasin(m3);
-  await appeler('prendre'); await appeler('deposer', { sim, reglages: { veille: true, heures: 10, cles: { groq: 'gsk_x' }, liberer: true } });
-  const t1 = m3.brut().temps;
-  const faireEtPageRevient = async (opts) => {
-    const doc = m3.brut();
-    m3.ecrireAilleurs({ ...doc, bail: { id: 'page-A', jusqua: Date.now() + 1e7 }, majA: 123 }); // la page prend la main en cours de route
-    return faireVivre(opts);
-  };
-  r = await lancerRelais({ maintenant, transport: transportOk(), budgetMs: 50000, faire: faireEtPageRevient, ...h });
-  assert.equal(r.fait, false); assert.equal(r.raison, 'la page a repris la main');
-  assert.equal(m3.brut().majA, 123, 'ce que la page a écrit est intact');
-  assert.equal(m3.brut().temps, t1, 'et l\'état n\'a pas été écrasé par le relais');
+  let r = await appeler('deposer', { sim, reglages: { idPartie: 'p1', veille: true, heures: 8, cles: { groq: 'gsk_x' }, liberer: false } });
+  assert.equal(envoyes.length, 0, 'tant que la page est ouverte, rien ne démarre');
+  r = await appeler('deposer', { sim, reglages: { liberer: true } });
+  assert.equal(r.code, 200); assert.equal(envoyes.length, 1, 'la page part : le relais démarre aussitôt');
+  assert.equal(r.body.relaisLance.demarre, true);
+  assert.equal(envoyes[0].corps.hop, 0); assert.ok(envoyes[0].corps.etat.length > 100);
+  // sans veille armée : rien
+  const m2 = faussMagasin(); definirMagasin(m2); await appeler('prendre');
+  r = await appeler('deposer', { sim, reglages: { veille: false, liberer: true } });
+  assert.equal(envoyes.length, 1); assert.equal(r.body.relaisLance, undefined);
+  // l'appel interne échoue : la page n'en sait rien et le village est quand même sauvegardé
+  dependances.envoyer = async () => { throw new Error('réseau'); };
+  const m3 = faussMagasin(); definirMagasin(m3); await appeler('prendre');
+  r = await appeler('deposer', { sim, reglages: { veille: true, heures: 8, cles: { groq: 'gsk_x' }, liberer: true } });
+  assert.equal(r.code, 200); assert.ok(m3.brut().etat, 'le village est sauvegardé malgré tout');
+  dependances.envoyer = avant;
+  // un premier passage qui n'a pas pu partir n'empêche pas d'en relancer un
+  const m4 = faussMagasin(); definirMagasin(m4); await appeler('prendre');
+  await appeler('deposer', { sim, reglages: { veille: true, heures: 8, cles: { groq: 'gsk_x' }, liberer: true } });
+  assert.equal(m4.brut().relais.chaine, null, 'la marque de chaîne est effacée');
+  assert.equal((await demarrerChaine({ maintenant: Date.now() })).fait, true, 'et on peut relancer tout de suite');
 }
 
-// ======== 4. le point d'accès « veille » (tâche planifiée) ========
-{
-  definirMagasin(faussMagasin());
-  const r = res(); await veille({ method: 'GET', headers: {} }, r);
-  assert.equal(r.code, 200); assert.equal(r.body.fait, false); assert.equal(r.body.raison, 'aucun village');
-}
-
-console.log('Relais de nuit : le village avance sans la page, jamais en même temps qu\'elle, clés jamais renvoyées. OK');
+console.log('Relais de nuit : chaîne de passages, une seule à la fois, jamais en même temps que la page, peu d\'écritures, signature. OK');
