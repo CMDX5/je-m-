@@ -32,7 +32,7 @@ export function resumer(sim, penseur, erreursPage) {
     // 4 habitants différents à chaque rapport, pour voir tout le village au fil du temps
     echantillon: H.filter((v) => v.nbDecisions > 0).sort(() => Math.random() - 0.5).slice(0, 4).map((v) => ({ nom: v.prenom, age: v.age, metier: v.metier, faim: Math.round(v.besoins.faim), soif: Math.round(v.besoins.soif), pieces: Math.round(v.poche.pieces), pensee: v.pensee, identite: v.identite, lecons: (v.lecons || '').slice(0, 220), questions: (v.questions || '').slice(0, 220), souvenirs: v.souvenirs.slice(-2).map((s) => s.texte.slice(0, 120)), avis: Object.values(v.avis).slice(-2).map((a) => a.texte) })),
     interieur: (sim.interieur || []).filter((e) => e.type !== 'pensee' && e.type !== 'parole').slice(-6).map((e) => ({ t: sim.horodatage(e.t), de: sim.habitant(e.id)?.prenom, type: e.type, texte: e.texte.slice(0, 220) })),
-    bilans: { faits: H.filter((v) => v.resume).length, avecLecons: H.filter((v) => v.lecons).length, avecQuestions: H.filter((v) => v.questions).length, enAttente: H.filter((v) => v.bilanDu).length },
+    bilans: { faits: H.filter((v) => v.resume).length, avecLecons: H.filter((v) => v.lecons).length, avecQuestions: H.filter((v) => v.questions).length, avecAvisConseil: H.filter((v) => v.avisConseil).length, avecLiens: H.filter((v) => Object.values(v.avis).some((a) => a.lien)).length, enAttente: H.filter((v) => v.bilanDu).length },
     erreursPage: erreursPage.slice(-5),
   };
   // la vie intérieure d'abord : les journaux d'hébergement coupent les longs messages par la fin

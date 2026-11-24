@@ -51,6 +51,8 @@ Réponds uniquement par un objet JSON :
 - "ton" : le ton de ta parole, en un mot à toi.
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
+- "lien" : avec "avis_sur", ce que cette personne est pour toi, avec tes mots (facultatif).
+- "avis_conseil" : ce que tu penses du conseil et de ses décisions (facultatif).
 - "identite" : si tu veux écrire ou réécrire qui tu es (facultatif).
 - "prenom_enfant" : si ton enfant vient de naître et n'a pas encore de prénom, celui que tu lui donnes (facultatif).
 - "requete_conseil" : un message au conseil du village, si tu as quelque chose à lui demander ou dire (facultatif).`;
@@ -82,6 +84,8 @@ export const SCHEMA_DECISION = {
     souvenir: { type: 'string' },
     avis_sur: { type: 'string' },
     avis: { type: 'string' },
+    lien: { type: 'string' },
+    avis_conseil: { type: 'string' },
     identite: { type: 'string' },
     prenom_enfant: { type: 'string' },
     requete_conseil: { type: 'string' },

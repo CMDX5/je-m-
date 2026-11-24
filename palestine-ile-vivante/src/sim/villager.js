@@ -30,7 +30,8 @@ export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
     lecons: '', // ce qu'il a compris de la vie ici, écrit par lui le soir
     questions: '', // ce qu'il se demande en ce moment, écrit par lui le soir (souvent vide)
     souvenirs: [], // { t, texte }
-    avis: {}, // id -> { t, texte }
+    avis: {}, // id -> { t, texte, lien } : ce qu'il pense de chacun, et ce que chacun est pour lui (ses mots)
+    avisConseil: null, // { t, texte } : ce qu'il pense du conseil
     dialogue: [], // échanges avec le conseil
     // mécanique
     x: 0, z: 0, dir: 0, path: null, interieur: true, batiment: foyer,

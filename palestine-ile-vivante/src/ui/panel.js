@@ -344,7 +344,7 @@ export class Interface {
   vueParoles() {
     const s = this.sim;
     const f = this.filtreParoles || 'flux';
-    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis sur les autres'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['questions', 'Ce qu\'ils se demandent']];
+    const filtres = [['flux', 'Ce qui se dit'], ['fluxtout', 'Tout, même la routine'], ['tout', 'Vie intérieure'], ['souvenir', 'Souvenirs'], ['avis', 'Avis et relations'], ['conseil', 'Avis sur le conseil'], ['identite', 'Qui je suis'], ['lecons', 'Ce qu\'ils comprennent'], ['questions', 'Ce qu\'ils se demandent']];
     let out = `<h3>Paroles</h3><div class="filtres-journal">${filtres.map(([k, n]) => `<button class="btn ${k === f ? 'actif' : ''}" data-paroles="${k}" type="button">${n}</button>`).join('')}</div>`;
     if (f === 'flux' || f === 'fluxtout') {
     out += `<p class="note">${f === 'flux' ? 'Seulement ce qui est dit à voix haute.' : 'Tout ce qu\'ils disent et pensent, y compris les pensées de simple routine.'}</p>`;
@@ -362,7 +362,7 @@ export class Interface {
       return out;
     }
     out += `<p class="note">Rien ici n'est écrit par le jeu : ce sont leurs propres mots — ce qu'ils retiennent, pensent des autres, disent d'eux-mêmes, comprennent de leur vie. Les phrases de simple routine restent dans « Ce qui se dit ».</p>`;
-    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons', questions: (e) => e.type === 'questions' }[f] || (() => true);
+    const garder = { tout: () => true, souvenir: (e) => e.type === 'souvenir' || e.type === 'bilan', avis: (e) => e.type === 'avis' || e.type === 'lien', conseil: (e) => e.type === 'conseil', identite: (e) => e.type === 'identite', lecons: (e) => e.type === 'lecons', questions: (e) => e.type === 'questions' }[f] || (() => true);
     const liste = (s.interieur || []).filter(garder).slice(-150).reverse();
     if (!liste.length) out += `<p class="note">Rien encore. ${f === 'lecons' || f === 'identite' || f === 'questions' ? 'Cela s\'écrit le soir, quand ils font le point avant de dormir.' : 'Laissez vivre le village.'}</p>`;
     const nom = (id) => s.habitant(id)?.prenom || '?';
@@ -376,6 +376,8 @@ export class Interface {
         parole: `${qui} dit${sur ? ` à ${sur}` : ''} : « ${esc(e.texte)} »${ton}`,
         souvenir: `${qui} retient : « ${esc(e.texte)} »`,
         avis: `${qui}, à propos de ${sur} : « ${esc(e.texte)} »${avant}`,
+        lien: `${qui} : pour lui, ${sur} est « ${esc(e.texte)} »${avant}`,
+        conseil: `${qui} sur le conseil : « ${esc(e.texte)} »${avant}`,
         identite: `${qui} se décrit : « ${esc(e.texte)} »${avant}`,
         lecons: `${qui} a compris : « ${esc(e.texte)} »${avant}`,
         questions: `${qui} se demande : « ${esc(e.texte)} »${avant}`,
@@ -567,10 +569,11 @@ export class Interface {
       ${v.resume ? `<div class="note"><b>Bilan :</b> ${esc(v.resume)}</div>` : ''}
       ${v.lecons ? `<div class="note"><b>Ce qu'il a compris :</b> ${esc(v.lecons)}</div>` : ''}
       ${v.questions ? `<div class="note"><b>Ce qu'il se demande :</b> ${esc(v.questions)}</div>` : ''}
+      ${v.avisConseil ? `<div class="note"><b>Ce qu'il pense du conseil :</b> ${esc(v.avisConseil.texte)}</div>` : ''}
       ${souvenirs.length ? souvenirs.map((m) => `<div class="souvenir"><i style="background:var(--accent)"></i><span>${esc(m.texte)}<small>${esc(s.horodatage(m.t))}</small></span></div>`).join('') : '<p class="note">Aucun souvenir noté pour l’instant.</p>'}
 
       <h3>Ce qu'${F ? 'elle' : 'il'} pense des autres</h3>
-      ${avis.length ? avis.map(([id, a]) => `<div class="relation"><span class="lien" data-hab="${id}">${esc(s.habitant(Number(id)).prenom)}</span><span class="note">${esc(a.texte)}</span></div>`).join('') : '<p class="note">Pas encore d’avis formulé.</p>'}
+      ${avis.length ? avis.map(([id, a]) => `<div class="relation"><span class="lien" data-hab="${id}">${esc(s.habitant(Number(id)).prenom)}</span><span class="note">${a.lien ? `<b>${esc(a.lien)}</b>${a.texte ? ' · ' : ''}` : ''}${esc(a.texte || '')}</span></div>`).join('') : '<p class="note">Pas encore d’avis formulé.</p>'}
       <h3>Famille</h3>${famille.length ? famille.map((o) => `<div class="relation"><span class="lien" data-hab="${o.id}">${esc(o.prenom)}</span><span class="note">${o.mort ? `mort${o.genre === 'F' ? 'e' : ''} ${esc(o.mort.cause)}` : `${this.agePhrase(o)} · ${esc(libelleMetier(o))}`}</span></div>`).join('') : `<p class="note">Vit seul${F ? 'e' : ''}.</p>`}
       <p class="note">${v.nbDecisions} décisions · ${v.stats.paroles} paroles · ${Math.round(v.stats.dons)} dons · ${v.stats.prises} prises · ${v.stats.requetes} demandes au conseil</p>`;
     if (el.dataset.cache !== html) {

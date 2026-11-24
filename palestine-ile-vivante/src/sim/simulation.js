@@ -666,10 +666,21 @@ export class Simulation {
     retenir(v, this.temps, souvenir);
     if (souvenir) this.vivre(v, 'souvenir', souvenir);
     const cibleAvis = d.avis_sur ? this.personne(d.avis_sur) : null;
-    if (cibleAvis && cibleAvis !== v && d.avis) {
-      const avant = v.avis[cibleAvis.id]?.texte;
-      v.avis[cibleAvis.id] = { t: this.temps, texte: clip(d.avis, 500) };
-      if (v.avis[cibleAvis.id].texte !== avant) this.vivre(v, 'avis', v.avis[cibleAvis.id].texte, { sur: cibleAvis.id, avant });
+    if (cibleAvis && cibleAvis !== v && (d.avis || d.lien)) {
+      const prec = v.avis[cibleAvis.id];
+      const texte = d.avis ? clip(d.avis, 500) : prec?.texte || '';
+      const lien = d.lien ? clip(d.lien, 80) : prec?.lien || '';
+      v.avis[cibleAvis.id] = { t: this.temps, texte, lien };
+      if (texte && texte !== prec?.texte) this.vivre(v, 'avis', texte, { sur: cibleAvis.id, avant: prec?.texte });
+      if (lien && lien !== prec?.lien) this.vivre(v, 'lien', lien, { sur: cibleAvis.id, avant: prec?.lien });
+    }
+    if (d.avis_conseil && String(d.avis_conseil).trim()) {
+      const texte = clip(d.avis_conseil, 600);
+      if (texte !== v.avisConseil?.texte) {
+        const avant = v.avisConseil?.texte;
+        v.avisConseil = { t: this.temps, texte };
+        this.vivre(v, 'conseil', texte, { avant });
+      }
     }
     if (d.identite && String(d.identite).trim()) this.changerIdentite(v, clip(d.identite, 600));
     if (d.requete_conseil && String(d.requete_conseil).trim()) {

@@ -46,9 +46,18 @@ for (const [mot, attendu] of [['rations', 'nourriture'], ['du pain', 'nourriture
   const autre = sim.habitants.find((x) => x !== v);
   const n0 = sim.interieur.length;
   sim.marquerEnvoye(v.id);
-  sim.appliquer(v.id, { pensee: `Je me demande si ${autre.prenom} m'en veut encore.`, humeur: 40, action: 'rien', parole: '', souvenir: 'Le premier matin sur la plage.', avis_sur: autre.prenom, avis: 'Il ne dit jamais ce qu\'il pense.', identite: 'Quelqu\'un qui doute.' });
+  sim.appliquer(v.id, { pensee: `Je me demande si ${autre.prenom} m'en veut encore.`, humeur: 40, action: 'rien', parole: '', souvenir: 'Le premier matin sur la plage.', avis_sur: autre.prenom, avis: 'Il ne dit jamais ce qu\'il pense.', lien: 'un voisin qui me manque', avis_conseil: 'Le conseil écoute peu.', identite: 'Quelqu\'un qui doute.' });
   const types = sim.interieur.slice(n0).map((e) => e.type);
-  assert.deepEqual(types, ['pensee', 'souvenir', 'avis', 'identite'], 'pensée personnelle, souvenir, avis et identité notés');
+  assert.deepEqual(types, ['pensee', 'souvenir', 'avis', 'lien', 'conseil', 'identite'], 'pensée, souvenir, avis, relation (ses mots), avis sur le conseil et identité notés');
+  assert.equal(v.avis[autre.id].lien, 'un voisin qui me manque');
+  assert.equal(v.avisConseil.texte, 'Le conseil écoute peu.');
+  assert.match(sim.construirePrompt(v.id), new RegExp(`${autre.prenom} \\(pour toi : un voisin qui me manque\\)`), 'il relit ce que l\'autre est pour lui');
+  assert.match(sim.construirePrompt(v.id), /Ce que tu penses du conseil : Le conseil écoute peu/, 'et ce qu\'il pense du conseil');
+  // un lien seul, sans nouvel avis, garde l\'avis précédent ; un avis identique ne se répète pas dans le journal
+  const nb = sim.interieur.length; sim.marquerEnvoye(v.id); sim.appliquer(v.id, { pensee: '…', humeur: 50, action: 'rien', parole: '', avis_sur: autre.prenom, lien: 'un ami', avis_conseil: 'Le conseil écoute peu.' });
+  assert.equal(v.avis[autre.id].texte, 'Il ne dit jamais ce qu\'il pense.');
+  assert.equal(sim.interieur.slice(nb).filter((e) => e.type === 'lien').length, 1);
+  assert.equal(sim.interieur.slice(nb).filter((e) => e.type === 'conseil').length, 0, 'une opinion inchangée n\'est pas répétée');
   const n1 = sim.interieur.length;
   const w = sim.habitants.find((x) => x.statut === 'attend' && x.age > 16);
   sim.marquerEnvoye(w.id);

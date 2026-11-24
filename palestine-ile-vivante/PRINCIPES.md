@@ -6,7 +6,7 @@ Ce document est généré par `node tools/doc-principes.mjs` à partir du code. 
 ## 0. En un coup d'œil
 
 **Ce qui vient des habitants** (texte et choix produits par un modèle de langage, à chaque décision) :
-pensées, paroles et ton de la voix, humeur, action choisie, personne à qui parler, lieu où aller, souvenirs retenus, avis sur les autres, description de soi,
+pensées, paroles et ton de la voix, humeur, action choisie, personne à qui parler, lieu où aller, souvenirs retenus, avis sur les autres, **ce que chacun est pour eux (leurs mots : ami, voisin, rival…)**, **ce qu'ils pensent du conseil et de ses décisions**, description de soi,
 questions qu'ils se posent, leçons tirées de leur vie, résumé de leur journée, demandes et avis adressés au conseil, choix d'aider, de discuter, d'acheter, de prendre, de donner ou de se disputer,
 **envie d'avoir un enfant et choix de la personne**, prénom donné à l'enfant, réactions à un décès, à la pluie ou à la chaleur.
 
@@ -19,8 +19,8 @@ les conséquences physiques de leurs décisions ; les textes d'état (« dort »
 - **Ce qu'ils perçoivent est écrit par le jeu** : les phrases de sensation (« tu as soif »), le résumé de la situation, les événements racontés (« X est mort »), le choix des souvenirs et des avis relus (les 18 derniers souvenirs, 4 avis récents), les règles du monde et la liste des gestes possibles. Le jeu ne leur dit pas quoi penser, mais il décide **ce qu'ils savent**.
 - **Le jeu interprète leurs mots** : un lieu, une personne ou un objet écrit librement (« du pain », « chez Aïcha ») est traduit en action du monde ; une action impossible est refusée avec la raison.
 - **Une dispute est détectée par le jeu** à partir du ton choisi par l'habitant (« colère », « tendu ») ; les mots échangés, eux, sont les leurs.
-- **Il n'y a pas d'action « demander »** : demander de l'argent, de la nourriture ou des soins se fait par la parole, une demande au conseil, ou par un achat, un don, une prise ; il n'y a pas non plus de champ « avis sur le conseil » : l'avis passe par la pensée, la parole ou la demande.
-- **« Relations personnelles »** : seuls leurs avis sur chacun sont à eux ; il n'existe pas de statut de relation (ami, couple…) calculé par le jeu, sauf les couples et parentés de départ.
+- **Il n'y a pas d'action « demander »** : demander de l'argent, de la nourriture ou des soins se fait par la parole, une demande au conseil, ou par un achat, un don, une prise. C'est voulu : une action « demander » ne ferait que doubler la parole.
+- **Relations et avis sur le conseil** : chaque habitant peut écrire ce que chacun est pour lui (champ `lien`, mot libre) et ce qu'il pense du conseil (champ `avis_conseil`). Le jeu les garde, les affiche et les relit à l'habitant ; il ne calcule aucun statut de relation (ami, couple…), sauf les couples et parentés de départ.
 - **Exceptions** : le prénom d'un nouveau-né si les parents n'en choisissent pas (12 h de jeu) ; le sexe du bébé (tiré au hasard) ; les nourrissons (moins de 2 ans), qui ne décident pas ; l'entrée à l'école à 6 ans et le statut d'adulte à 17 ans.
 - **Une seule voix derrière plusieurs personnes** : un même modèle joue jusqu'à 8 habitants par appel ; ce sont des textes plausibles, pas des consciences.
 
@@ -98,11 +98,13 @@ Réponds uniquement par un objet JSON :
 - "ton" : le ton de ta parole, en un mot à toi.
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
+- "lien" : avec "avis_sur", ce que cette personne est pour toi, avec tes mots (facultatif).
+- "avis_conseil" : ce que tu penses du conseil et de ses décisions (facultatif).
 - "identite" : si tu veux écrire ou réécrire qui tu es (facultatif).
 - "prenom_enfant" : si ton enfant vient de naître et n'a pas encore de prénom, celui que tu lui donnes (facultatif).
 - "requete_conseil" : un message au conseil du village, si tu as quelque chose à lui demander ou dire (facultatif).
 
-FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "prenom_enfant", "requete_conseil"). Ta pensée et ta parole peuvent être aussi longues ou aussi courtes que tu veux. Forme seulement (les "..." sont à remplacer par tes mots et ton choix) : {"habitants": [{"id": 3, "pensee": "...", "humeur": 0, "action": "...", "parole": "..."}]}
+FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "lien", "avis_conseil", "identite", "prenom_enfant", "requete_conseil"). Ta pensée et ta parole peuvent être aussi longues ou aussi courtes que tu veux. Forme seulement (les "..." sont à remplacer par tes mots et ton choix) : {"habitants": [{"id": 3, "pensee": "...", "humeur": 0, "action": "...", "parole": "..."}]}
 
 Le village :
 - Marché : 150 ration(s) à vendre, 1 pièce(s) la ration ; remède : 5 pièces. Eau gratuite à la source.

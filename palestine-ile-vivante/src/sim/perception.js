@@ -57,6 +57,9 @@ function quiEstLa(sim, v) {
   return out;
 }
 
+// Ce qu'il pense d'une personne, et ce qu'elle est pour lui, avec ses mots à lui
+const phraseAvis = (sim, id, a) => `${sim.habitant(Number(id)).prenom}${a.lien ? ` (pour toi : ${a.lien})` : ''}${a.texte ? ` : ${a.texte}` : ''}`;
+
 export function construirePrompt(sim, v, type = 'decision', { commun = true } = {}) {
   const h = sim.heure();
   const hh = Math.floor(h), mm = String(Math.floor((h - hh) * 60)).padStart(2, '0');
@@ -81,8 +84,9 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
     if (v.questions) L.push(`Ce que tu te demandais : ${v.questions}`);
     L.push('Ce que tu as retenu récemment :');
     for (const s of v.souvenirs.slice(-24)) L.push(`- (${sim.horodatage(s.t)}) ${s.texte}`);
-    const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => `${sim.habitant(Number(id)).prenom} : ${a.texte}`);
+    const avis = Object.entries(v.avis).slice(-8).map(([id, a]) => phraseAvis(sim, id, a));
     if (avis.length) L.push(`Tes avis sur les autres : ${avis.join(' ; ')}`);
+    if (v.avisConseil) L.push(`Ce que tu penses du conseil : ${v.avisConseil.texte}`);
     return L.join('\n');
   }
 
@@ -127,8 +131,9 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   }
   const recents = Object.entries(v.avis).sort((a, b) => (b[1].t ?? 0) - (a[1].t ?? 0)).slice(0, 4).map(([id]) => Number(id));
   const concernes = new Set([...v.famille, ...recents, ...sim.habitants.filter((o) => o !== v && (o.interieur ? o.batiment === v.batiment && v.interieur : !v.interieur && Math.hypot(o.x - v.x, o.z - v.z) < 10)).map((o) => o.id)]);
-  const avis = [...concernes].filter((id) => v.avis[id]).map((id) => `${sim.habitant(id).prenom} : ${v.avis[id].texte}`);
+  const avis = [...concernes].filter((id) => v.avis[id]).map((id) => phraseAvis(sim, id, v.avis[id]));
   if (avis.length) L.push(`Ce que tu penses de tes proches et des gens autour de toi : ${avis.join(' ; ')}.`);
+  if (v.avisConseil) L.push(`Ce que tu penses du conseil : ${v.avisConseil.texte}`);
 
   if (!commun) return L.join('\n');
   L.push('');
