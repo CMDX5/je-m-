@@ -45,6 +45,36 @@ const placer = (sim, mois) => { sim.temps = DEBUT_PLUIE_MIN + mois * MOIS_MIN; s
   assert.ok(!/puits communal/.test(sans.construirePrompt(5)));
 }
 
+// ---- la fontaine du marché : la réponse à « des réserves d'eau plus accessibles » ----
+{
+  const sim = nouveau(); sim.rng.chance = () => false;
+  assert.deepEqual(sim.lancerProjet('fontaine'), { ok: true });
+  assert.deepEqual(sim.siteProjet('fontaine'), { x: -3, z: 17.5 }, 'sur la place du marché');
+  sim.projet.progres = sim.projet.travail; sim.terminerProjet();
+  assert.equal(sim.bonus.fontaine, true);
+  const f = sim.batimentsParId.fontaine;
+  assert.ok(f && f.ajoute && sim.batiments.includes(f));
+  assert.equal(sim.lancerProjet('fontaine').ok, false, 'une seule fontaine');
+  assert.match(sim.construirePrompt(5), /fontaine sur la place du marché donne de l'eau gratuite/, 'les habitants le savent');
+  const v = sim.habitants.find((h) => h.age > 20 && !h.interieur) || sim.habitants.find((h) => h.age > 20);
+  v.interieur = false; v.poche.eau = 0;
+  // du marché, on va à la fontaine plutôt qu'à la source lointaine ; de la source, on reste à la source
+  v.x = 4; v.z = 12;
+  const lieu = sim.lieuPour(v, { cle: 'source' });
+  assert.equal(lieu.nomLieu, 'la fontaine du marché'); assert.ok(Math.hypot(lieu.x - f.x, lieu.z - f.z) < 4.5, 'on boit au bord de la fontaine');
+  v.x = -12; v.z = -50;
+  assert.notEqual(sim.lieuPour(v, { cle: 'source' }).nomLieu, 'la fontaine du marché');
+  // et l'eau y est gratuite, comme à la source
+  v.x = f.x; v.z = f.z + 2.5; v.besoins.soif = 20; sim.boire(v, {});
+  assert.equal(v.besoins.soif, 65, 'boire à la fontaine étanche la soif');
+  v.x = 4; v.z = 40; v.besoins.soif = 20; v.poche.eau = 0; v.interieur = false;
+  const a = {}; sim.boire(v, a);
+  assert.equal(v.besoins.soif, 20, 'loin de tout point d\'eau, rien à boire');
+  const copie = Simulation.charger(sim.serialiser());
+  assert.equal(copie.bonus.fontaine, true); assert.ok(copie.batimentsParId.fontaine);
+  assert.ok(!/fontaine sur la place/.test(nouveau().construirePrompt(5)));
+}
+
 // ---- la halle ombragée du marché : l'abri frais demandé par les habitants ----
 {
   const sim = nouveau(); sim.rng.chance = () => false;
