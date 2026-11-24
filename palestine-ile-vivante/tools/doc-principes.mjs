@@ -5,7 +5,7 @@ import { SYSTEME, SYSTEME_BILAN } from '../src/sim/prompts.js';
 import { promptLot, promptLotBilan } from '../src/sim/penseur-claude.js';
 
 const sim = new Simulation({ seed: 7 }).init();
-const v = sim.habitants[3];
+const v = sim.habitant(3);
 sim.appliquerBilan(v.id, { resume: '(exemple) Résumé écrit par l’habitant.', identite: '(exemple) Description écrite par l’habitant.', lecons: '(exemple) Leçons écrites par l’habitant.', questions: '' });
 const decision = promptLot(sim, [v.id]);
 const bilan = promptLotBilan(sim, [v.id]);
@@ -24,6 +24,10 @@ Code : \`src/sim/simulation.js\`, \`monde.js\`, \`data.js\`, \`navigation.js\`.
 - **L'espace** : cartes, bâtiments, trajets, temps de marche.
 - **Les actions possibles** : dormir, manger, boire, travailler, aller, parler, donner, prendre, acheter, se soigner, prier, se reposer, flâner, étudier, jouer, puiser de l'eau, emménager, rien. Chaque action a des effets physiques. **Aucune n'est déclenchée par le jeu à la place de l'habitant.**
 - **Le conseil** (le joueur) : annonces, réponses aux demandes, prix, salaires, dons, amendes, métiers confiés, chantiers.
+- **Le calendrier et le cycle de vie** (\`src/sim/vie.js\`) : une année du village dure 2 jours (un mois : 4 h, une semaine : environ 55 min). Les corps vieillissent en continu.
+  - **Mort** : un corps sans santé pendant 2 heures s'éteint ; sinon risque horaire selon l'âge (loi de Gompertz : 0,07 %/an à 20 ans, environ 3 %/an à 70 ans, 15 %/an à 90 ans), la maladie et la faiblesse. Une maladie guérit en général seule (4 %/heure). À la mort, le jeu ne fait que constater : l'argent passe à un proche, les provisions restent à la maison, les dettes s'éteignent, tout le village l'apprend comme un fait. **Le deuil, la prière, les souvenirs, ce qu'on en dit viennent des habitants.**
+  - **Enfant** : action \`avoir_un_enfant\` (aller vers une personne pour lui dire qu'on voudrait un enfant avec elle). La loi : deux adultes de 17 ans ou plus, un homme et une femme (45 ans au plus), qui ne sont pas de la même famille, la femme n'attendant pas déjà un enfant. **Il faut que les deux le décident, chacun de son côté** ; sinon rien. Grossesse de 9 mois (36 h de jeu). **Le prénom est donné par les parents** (champ \`prenom_enfant\`).
+  - **Nourrissons** (moins de 2 ans) : ils ne décident pas encore ; la maison les nourrit (loi du monde) et s'il n'y a plus de provisions leur corps faiblit. À 2 ans, ils commencent à décider, avec une mémoire vide.
 
 ## 2. Ce qui vient des habitants (un modèle de langage, à chaque décision)
 
@@ -57,11 +61,12 @@ ${bilan}
 - **Priorité de parole** : quand le conseil parle à un habitant ou qu'on lui parle, il repasse en tête de file pour répondre.
 - **Quand un modèle est indisponible**, l'habitant garde son tour et attend ; il n'est pas réduit à « ne rien faire ».
 - **Les sensations** sont des phrases du jeu (« tu as soif », « tu es fatigué ») choisies selon des seuils : c'est la perception du corps, pas une consigne.
+- **Exceptions à « tout vient des habitants »** : le village donne un prénom à un nouveau-né si ses parents n'en choisissent pas en 12 h de jeu ; les nourrissons ne décident pas ; les liens de parenté de départ (couples, enfants) et les âges initiaux (3 à 82 ans) sont posés par le jeu ; un habitant qui devient adulte ou entre à l'école change de statut automatiquement (6 ans, 17 ans).
 - **Aucune conscience réelle** : ce sont des textes produits par un modèle de langage. L'écran d'accueil le dit.
 
 ## 5. Comment vérifier
 
-- \`npm test\` : lois du monde, absence de consignes de comportement dans les textes envoyés, bilan du soir, relais entre modèles.
+- \`npm test\` : lois du monde (dont le cycle de vie : \`tests/vie.test.mjs\`), absence de consignes de comportement dans les textes envoyés, bilan du soir, relais entre modèles.
 - Onglet **Paroles** du jeu : ce que disent, pensent, retiennent et se demandent les habitants, avec « avant / après » pour leur description et leurs leçons.
 `);
 console.log('PRINCIPES.md écrit');

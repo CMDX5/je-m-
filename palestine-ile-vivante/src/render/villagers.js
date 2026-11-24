@@ -118,6 +118,9 @@ function jeter(sp) {
 const DUREE_PAROLE = 8, DUREE_PENSEE = 9, MAX_BULLES = 14;
 const ACTIVITE_BATIMENT = { mosquee: 'Mosquée', ecole: 'École', dispensaire: 'Dispensaire', atelier: 'Atelier', entrepot: 'Entrepôt' };
 
+// la taille suit l'âge : un enfant grandit sous les yeux du village
+const tailleDe = (age) => (age < 2 ? 0.4 : age < 6 ? 0.55 : age < 12 ? 0.7 : age < 16 ? 0.85 : age > 70 ? 0.94 : 1);
+
 export class Habitants3D {
   constructor(scene, sim) {
     this.scene = scene;
@@ -138,6 +141,14 @@ export class Habitants3D {
     this.voirPensees = true;
     this.voirNoms = true;
     this.badges = {}; // bâtiment → { sp, texte }
+    // la vie du village : un enfant naît, quelqu'un meurt
+    sim.on('naissance', (v) => this.ajouter(v));
+    sim.on('deces', (v) => {
+      const f = this.figures[v.id];
+      if (f) { f.g.visible = false; if (f.nom) f.nom.visible = false; f.anim = null; }
+      for (const b of this.textes) if (b.id === v.id) { jeter(b.sp); b.fin = 0; }
+      this.textes = this.textes.filter((b) => b.fin > 0);
+    });
     sim.on('parole', (p) => this.montrer(p.id, p.texte, /col[eè]re|furieu|énerv/i.test(p.ton || '') ? 'colere' : 'parole', DUREE_PAROLE));
     sim.on('pensee', (p) => { if (this.voirPensees || p.id === this.selection) this.montrer(p.id, p.texte, 'pensee', DUREE_PENSEE); });
 
@@ -216,8 +227,9 @@ export class Habitants3D {
       bras.push(pivot);
     }
     // échelle selon l'âge
-    const taille = v.age < 6 ? 0.55 : v.age < 12 ? 0.7 : v.age < 16 ? 0.85 : v.age > 70 ? 0.94 : 1;
-    const echelle = taille * (0.95 + rnd(5) * 0.1);
+    const taille = tailleDe(v.age);
+    const variation = 0.95 + rnd(5) * 0.1;
+    const echelle = taille * variation;
     g.scale.setScalar(echelle);
 
     const bulle = new THREE.Sprite(this.bulles.parle);
@@ -230,7 +242,7 @@ export class Habitants3D {
     g.traverse((o) => { if (o.isMesh) { o.userData.habitant = v.id; this.cliquables.push(o); } });
     g.position.set(v.x, solY(v.x, v.z), v.z);
     this.scene.add(g);
-    this.figures[v.id] = { g, jambes, bras, bulle, habit, echarpe, taille, echelle, phase: rnd(6) * 6, px: v.x, pz: v.z, metier: v.metier, F };
+    this.figures[v.id] = { g, jambes, bras, bulle, habit, echarpe, taille, echelle, variation, phase: rnd(6) * 6, px: v.x, pz: v.z, metier: v.metier, F };
   }
 
   montrer(id, texte, type, duree) {
@@ -279,6 +291,8 @@ export class Habitants3D {
     for (const v of sim.habitants) {
       const f = this.figures[v.id];
       if (!f) continue;
+      const t = tailleDe(v.age);
+      if (t !== f.taille) { f.taille = t; f.echelle = t * f.variation; if (!f.anim) f.g.scale.setScalar(f.echelle); }
       this.transition(v, f, maintenant);
       if (v.interieur && !f.anim) { f.g.visible = false; if (f.nom) f.nom.visible = false; continue; }
       f.g.visible = true;
@@ -462,7 +476,7 @@ export class Habitants3D {
     const place = (ring, id) => {
       const v = id != null ? this.sim.habitant(id) : null;
       const f = id != null ? this.figures[id] : null;
-      ring.visible = !!(v && f && !v.interieur);
+      ring.visible = !!(v && f && !v.interieur && !v.mort);
       if (ring.visible) ring.position.set(f.g.position.x, f.g.position.y + 0.06, f.g.position.z);
     };
     place(this.anneau, selectionId);

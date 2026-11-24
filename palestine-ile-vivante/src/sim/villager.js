@@ -6,7 +6,13 @@ import { METIERS } from './data.js';
 export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
   return {
     id, prenom, nom, genre, age, foyer,
+    naissance: 0, // minutes de jeu (négatif : né avant l'arrivée du conseil)
     famille: [],
+    conjoint: null, parents: [], // liens de parenté connus (utiles aux lois de la vie, pas à la pensée)
+    enceinte: null, // { pere, debut, terme }
+    nourrisson: false, // avant 2 ans : dans les bras, ne décide pas encore
+    mort: null, // { t, cause }
+    agonie: 0,
     metier: null,
     besoins: {
       faim: rng.range(55, 85),
@@ -36,7 +42,7 @@ export function creerHabitant({ id, prenom, nom, genre, age, foyer, rng }) {
     parolePendante: null,
     competence: {},
     malade: false, reposJusqua: 0,
-    echecs: 0, nbDecisions: 0, derniereBilan: -1e9,
+    echecs: 0, nbDecisions: 0, derniereBilan: -1e9, dernierAccouchement: -1e9,
     impaye: 0, chocJusqua: 0,
     stats: { paroles: 0, dons: 0, prises: 0, requetes: 0 },
   };

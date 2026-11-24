@@ -7,7 +7,7 @@
 
 export const ACTIONS = [
   'dormir', 'manger', 'boire', 'travailler', 'aller', 'parler', 'donner', 'prendre', 'acheter',
-  'se_soigner', 'prier', 'se_reposer', 'flaner', 'etudier', 'jouer', 'puiser_eau', 'emmenager', 'rien',
+  'se_soigner', 'prier', 'se_reposer', 'flaner', 'etudier', 'jouer', 'puiser_eau', 'emmenager', 'avoir_un_enfant', 'rien',
 ];
 
 export const LIEUX_IDS = [
@@ -39,6 +39,7 @@ Ce que ton corps peut faire dans ce monde, une chose à la fois :
 - jouer : jouer dans la cour de l'école.
 - puiser_eau : remplir ta cruche à la source et la rapporter chez toi.
 - emmenager : t'installer dans une maison libre (champ "lieu" : l'identifiant de la maison).
+- avoir_un_enfant : aller vers une personne (champ "personne") pour lui dire que tu voudrais un enfant avec elle ; l'enfant n'est attendu que si elle le veut aussi.
 - rien : attendre un peu.
 
 Réponds uniquement par un objet JSON :
@@ -51,6 +52,7 @@ Réponds uniquement par un objet JSON :
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
 - "identite" : si tu veux écrire ou réécrire qui tu es (facultatif).
+- "prenom_enfant" : si ton enfant vient de naître et n'a pas encore de prénom, celui que tu lui donnes (facultatif).
 - "requete_conseil" : un message au conseil du village, si tu as quelque chose à lui demander ou dire (facultatif).`;
 
 export const SYSTEME_BILAN = `Tu es un habitant d'un village sur une île de la Méditerranée. Tu t'apprêtes à dormir. Tu ne sais que ce qui est écrit dans le message. N'invente rien. Tu parles français, à la première personne.
@@ -81,6 +83,7 @@ export const SCHEMA_DECISION = {
     avis_sur: { type: 'string' },
     avis: { type: 'string' },
     identite: { type: 'string' },
+    prenom_enfant: { type: 'string' },
     requete_conseil: { type: 'string' },
   },
 };

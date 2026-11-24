@@ -4,6 +4,7 @@
 
 import { METIERS, METIERS_ADULTES, PROJETS, NOMS_OBJETS } from '../sim/data.js';
 import { nomComplet, libelleMetier } from '../sim/villager.js';
+import { moisDepuis, depuis } from '../sim/vie.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Une clé Google commence par « AIza » ; sinon, c'est une clé Groq.
@@ -59,6 +60,8 @@ export class Interface {
     });
 
     sim.on('requete', (r) => { this.toast(`${sim.habitant(r.de).prenom} s'adresse au conseil : « ${r.texte.slice(0, 90)} »`, 'conseil'); this.majBadges(); });
+    sim.on('deces', (v) => this.toast(`${nomComplet(v)} est mort${v.genre === 'F' ? 'e' : ''} ${v.mort.cause}.`, 'mal'));
+    sim.on('naissance', (v) => this.toast(`${nomComplet(v)} est né${v.genre === 'F' ? 'e' : ''}.`, 'bien'));
     sim.on('journal', (e) => { if (e.type === 'evenement' || /Chantier terminé|a été vu/.test(e.texte)) this.toast(e.texte, e.type); });
     this.majBadges();
     this.rendreContenu();
@@ -192,17 +195,19 @@ export class Interface {
     const malades = s.habitants.filter((v) => v.malade).length;
     const rep = s.repartitionMetiers();
     const max = Math.max(...Object.values(rep));
-    const ordre = ['agriculteur', 'pecheur', 'oleiculteur', 'marchand', 'batisseur', 'charpentier', 'artisan', 'soignant', 'enseignant', 'imam', 'eleve', 'enfant', 'ancien'];
+    const ordre = ['agriculteur', 'pecheur', 'oleiculteur', 'marchand', 'batisseur', 'charpentier', 'artisan', 'soignant', 'enseignant', 'imam', 'sansmetier', 'eleve', 'enfant', 'ancien'];
     const fin = s.nourritureFoyers();
     const dettes = s.dettes.reduce((t, d) => t + d.montant, 0);
     const p = this.penseur;
     let out = `<h3>Le village</h3>
       <div class="grille2">
         <div class="stat"><b>${s.habitants.length}</b><span>habitants · ${s.batiments.filter((b) => b.type === 'maison').length} maisons</span></div>
+        <div class="stat"><b>An ${s.annee}</b><span>une année = 2 jours · ${s.stats.naissances || 0} naissance${(s.stats.naissances || 0) > 1 ? 's' : ''}, ${s.stats.deces || 0} décès</span></div>
         <div class="stat"><b>${malades}</b><span>malade${malades > 1 ? 's' : ''}</span></div>
         <div class="stat"><b>${Math.round(fin)}</b><span>rations dans les maisons</span></div>
         <div class="stat"><b>${Math.round(dettes)}</b><span>pièces de dettes entre habitants</span></div>
       </div>
+      ${s.defunts.length ? `<h3>Disparus du village</h3>${[...s.defunts].reverse().slice(0, 20).map((d) => `<div class="relation"><span class="lien" data-hab="${d.id}">${esc(nomComplet(d))}</span><span class="note">${d.age} an${d.age > 1 ? 's' : ''} · ${esc(d.mort.cause)} · ${esc(depuis(d.mort.t, s.temps))}</span></div>`).join('')}` : ''}
       <h3>Économie</h3>
       <form class="inline" data-form="economie">
         <label>Salaire <input name="salaire" type="number" step="0.1" min="0" max="10" value="${s.salaire}"> pièce/h</label>
@@ -282,14 +287,22 @@ export class Interface {
     for (const v of liste) {
       out += `<div class="hab ${this.selection === v.id ? 'sel' : ''}" data-hab="${v.id}">
         <span class="pt" style="background:${hex(METIERS[v.metier]?.couleur ?? 0x888888)}"></span>
-        <span><span class="nom">${esc(nomComplet(v))}</span> <small class="note">${v.age} ans · ${esc(libelleMetier(v))}${v.malade ? ' · malade' : ''}</small><span class="etat">${esc(this.etat(v))}</span></span>
+        <span><span class="nom">${esc(nomComplet(v))}</span> <small class="note">${this.agePhrase(v)} · ${esc(libelleMetier(v))}${v.malade ? ' · malade' : ''}</small><span class="etat">${esc(this.etat(v))}</span></span>
         <span class="mini">${barre(v.humeur)}</span></div>`;
     }
     return out + '</div>';
   }
 
+  agePhrase(v) {
+    if (v.age >= 2) return `${v.age} ans`;
+    const mois = moisDepuis(v.naissance, this.sim.temps);
+    return v.age === 1 ? `1 an et ${mois - 12} mois` : `${mois} mois`;
+  }
+
   etat(v) {
     const s = this.sim;
+    if (v.mort) return `Mort${v.genre === 'F' ? 'e' : ''} ${v.mort.cause}`;
+    if (v.nourrisson) return 'Nourrisson, dans les bras de sa famille';
     if (v.statut === 'reflechit') return 'Réfléchit…';
     if (v.statut === 'attend') return v.nbDecisions ? 'Hésite, attend de décider' : 'Se réveille';
     if (v.conversation) {
@@ -508,12 +521,14 @@ export class Interface {
     const dlg = (v.dialogue || []).slice(-6);
 
     let html = `<div class="entete"><div><h2>${esc(nomComplet(v))}</h2>
-      <div class="sous">${v.age} ans · ${esc(libelleMetier(v))} · ${esc(foyer?.nom || '')}</div></div>
+      <div class="sous">${this.agePhrase(v)} · ${esc(libelleMetier(v))} · ${esc(foyer?.nom || '')}</div>
+      ${v.mort ? `<div class="sous neg">Mort${F ? 'e' : ''} ${esc(v.mort.cause)}, ${esc(depuis(v.mort.t, s.temps))} (jour ${v.mort.jour}). Sa mémoire reste lisible ci-dessous.</div>` : ''}
+      ${v.enceinte && !v.enceinte.accouche ? `<div class="sous">Attend un enfant (${moisDepuis(v.enceinte.debut, s.temps)} mois sur 9)</div>` : ''}</div>
       <button class="fermer" title="Fermer (Échap)" aria-label="Fermer">✕</button></div>
       <div class="pensee">${v.pensee ? `« ${esc(v.pensee)} »` : `<i>${v.statut === 'reflechit' ? 'Réfléchit…' : 'Pas encore de pensée.'}</i>`}${v.identite ? `<small>Se décrit : ${esc(v.identite)}</small>` : ''}</div>
       <div class="etat-actuel"><b>${esc(this.etat(v))}</b>${v.malade ? ' · <span class="neg">malade</span>' : ''}${v.urgence ? ` · ${esc(v.urgence)}` : ''}</div>
 
-      <h3>Parler à ${esc(v.prenom)}</h3>
+      ${v.mort || v.nourrisson ? `<p class="note">${v.mort ? 'Cet habitant n\'est plus.' : 'Un nourrisson ne décide pas encore : sa famille s\'en occupe.'}</p>` : `<h3>Parler à ${esc(v.prenom)}</h3>
       <div class="dialogue">${(v.conversation || dlg.length) ? '' : `<p class="note">${F ? 'Elle' : 'Il'} vous entendra à sa prochaine décision ; ${F ? 'elle' : 'il'} répondra comme ${F ? 'elle' : 'il'} le veut.</p>`}
         ${dlg.map((d) => `<p class="${d.de === 'conseil' ? 'moi' : 'lui'}"><b>${d.de === 'conseil' ? 'Conseil' : esc(d.de)}</b> ${esc(d.texte)}</p>`).join('')}</div>
       <form class="parole"><input id="parole" type="text" maxlength="300" placeholder="Que voulez-vous lui dire ?" autocomplete="off"><button class="btn" type="submit">Dire</button></form>
@@ -527,6 +542,7 @@ export class Interface {
         <button class="btn danger" data-amende="5" title="5 pièces d'amende">Amende 5</button>
         <button class="btn" data-suivre>Suivre</button></div>
       ${v.age >= 17 && v.age < 64 ? `<div class="metier-sel"><label class="note" for="choix-metier">Confier le métier de</label><select id="choix-metier"><option value="">—</option>${METIERS_ADULTES.map((m) => `<option value="${m}" ${v.metier === m ? 'selected' : ''}>${METIERS[m][F ? 'nomF' : 'nom']}</option>`).join('')}</select></div>` : ''}
+      `}
 
       <h3>Corps</h3>
       ${[['faim', 'Faim (satiété)'], ['soif', 'Soif'], ['energie', 'Forme'], ['sante', 'Santé'], ['securite', 'Sécurité']].map(([k, l]) => `<div class="ligne"><span class="lib">${l}</span>${barre(v.besoins[k])}<span class="val">${Math.round(v.besoins[k])}</span></div>`).join('')}
@@ -547,7 +563,7 @@ export class Interface {
 
       <h3>Ce qu'${F ? 'elle' : 'il'} pense des autres</h3>
       ${avis.length ? avis.map(([id, a]) => `<div class="relation"><span class="lien" data-hab="${id}">${esc(s.habitant(Number(id)).prenom)}</span><span class="note">${esc(a.texte)}</span></div>`).join('') : '<p class="note">Pas encore d’avis formulé.</p>'}
-      <h3>Famille</h3>${famille.length ? famille.map((o) => `<div class="relation"><span class="lien" data-hab="${o.id}">${esc(o.prenom)}</span><span class="note">${o.age} ans · ${esc(libelleMetier(o))}</span></div>`).join('') : `<p class="note">Vit seul${F ? 'e' : ''}.</p>`}
+      <h3>Famille</h3>${famille.length ? famille.map((o) => `<div class="relation"><span class="lien" data-hab="${o.id}">${esc(o.prenom)}</span><span class="note">${o.mort ? `mort${o.genre === 'F' ? 'e' : ''} ${esc(o.mort.cause)}` : `${this.agePhrase(o)} · ${esc(libelleMetier(o))}`}</span></div>`).join('') : `<p class="note">Vit seul${F ? 'e' : ''}.</p>`}
       <p class="note">${v.nbDecisions} décisions · ${v.stats.paroles} paroles · ${Math.round(v.stats.dons)} dons · ${v.stats.prises} prises · ${v.stats.requetes} demandes au conseil</p>`;
     if (el.dataset.cache !== html) {
       const saisie = $('#parole')?.value || '';

@@ -32,6 +32,7 @@ export const METIERS = {
   eleve: { nom: 'Élève', nomF: 'Élève', couleur: 0xd9b44a, lieu: 'ecole' },
   enfant: { nom: 'Enfant', nomF: 'Enfant', couleur: 0xe0a060, lieu: null },
   ancien: { nom: 'Ancien', nomF: 'Ancienne', couleur: 0x9a8c98, lieu: null },
+  sansmetier: { nom: 'Sans métier', nomF: 'Sans métier', couleur: 0xb0a89a, lieu: null },
 };
 
 // Métiers que le conseil peut confier à un adulte.

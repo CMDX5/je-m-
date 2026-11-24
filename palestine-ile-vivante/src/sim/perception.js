@@ -4,6 +4,7 @@
 
 import { libelleMetier, nomComplet } from './villager.js';
 import { METIERS, LIEUX, NOMS_OBJETS } from './data.js';
+import { depuis, moisDepuis } from './vie.js';
 
 const mot = (x, bas, hauts) => {
   for (const [seuil, texte] of hauts) if (x >= seuil) return texte;
@@ -16,7 +17,7 @@ function etatCorps(v) {
   const faim = mot(b.faim, `tu es affamé${e}`, [[75, `tu es rassasié${e}`], [50, "tu n'as pas faim"], [30, 'tu as faim'], [15, 'tu as très faim']]);
   const soif = mot(b.soif, `tu es assoiffé${e}`, [[75, "tu n'as pas soif"], [50, 'tu as un peu soif'], [30, 'tu as soif'], [15, 'tu as très soif']]);
   const fatigue = mot(b.energie, "tu t'écroules de fatigue", [[75, 'tu es en forme'], [50, `tu es un peu fatigué${e}`], [30, `tu es fatigué${e}`], [15, `tu es épuisé${e}`]]);
-  const sante = v.malade ? 'tu es malade' : mot(b.sante, `tu es très affaibli${e}`, [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile']]);
+  const sante = v.malade && b.sante >= 15 ? 'tu es malade' : mot(b.sante, "tu sens tes forces t'abandonner", [[75, 'tu es en bonne santé'], [50, 'tu te sens un peu faible'], [30, 'ta santé est fragile'], [15, `tu es très affaibli${e}`]]);
   const secu = mot(b.securite, 'tu as très peur', [[70, 'tu te sens en sécurité'], [45, (e ? 'tu te sens un peu inquiète' : 'tu te sens un peu inquiet')], [25, `tu te sens menacé${e}`]]);
   // des sensations, pas des chiffres : personne ne connaît sa soif « à 64 sur 100 »
   return `${faim}, ${soif}, ${fatigue}, ${sante}, ${secu}.`;
@@ -48,6 +49,7 @@ function quiEstLa(sim, v) {
     if (!proche) continue;
     let etat = o.conversation ? 'est en pleine conversation' : o.activite?.etat || 'est là';
     if (o.statut !== 'agit' && !o.conversation) etat = 'est là, sans rien faire de précis';
+    if (o.nourrisson) etat = 'est un nourrisson';
     out.push(`${nomComplet(o)} (${o.age} ans, ${libelleMetier(o).toLowerCase()}${o.malade ? ', a l\'air malade' : ''}) ${etat.toLowerCase()}`);
     if (out.length >= 7) break;
   }
@@ -61,7 +63,13 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   const maison = sim.batiment(v.foyer);
   const occupants = sim.occupants(v.foyer);
   const couchages = sim.couchages(v.foyer);
-  const famille = v.famille.map((id) => sim.habitant(id)).map((o) => `${o.prenom} (${o.age} ans)`).join(', ');
+  const proches = v.famille.map((id) => sim.habitant(id)).filter((o) => o && !o.mort);
+  const famille = proches.map((o) => `${o.prenom} (${o.age} an${o.age > 1 ? 's' : ''}${o.nourrisson ? ', nourrisson' : ''})`).join(', ');
+  const disparus = v.famille.map((id) => sim.habitant(id)).filter((o) => o?.mort).map((o) => `${o.prenom} (mort${o.genre === 'F' ? 'e' : ''} ${o.mort.cause}, ${depuis(o.mort.t, sim.temps)})`);
+  const attendus = [];
+  if (v.enceinte && !v.enceinte.accouche) attendus.push(`Tu attends un enfant de ${sim.habitant(v.enceinte.pere)?.prenom || 'son père'} (${moisDepuis(v.enceinte.debut, sim.temps)} mois sur 9).`);
+  for (const o of sim.habitants) if (o.enceinte && !o.enceinte.accouche && o.enceinte.pere === v.id) attendus.push(`${o.prenom} attend ton enfant (${moisDepuis(o.enceinte.debut, sim.temps)} mois sur 9).`);
+  for (const n of sim.naissancesEnAttente) if (n.mere === v.id || n.pere === v.id) attendus.push(`Ton enfant vient de naître (${n.sexe === 'F' ? 'une fille' : 'un garçon'}) et n'a pas encore de prénom.`);
   const L = [];
 
   if (type === 'bilan') {
@@ -82,6 +90,8 @@ export function construirePrompt(sim, v, type = 'decision', { commun = true } = 
   L.push(`Tu es ${nomComplet(v)}, ${v.age} ans, ${v.genre === 'F' ? 'une femme' : 'un homme'}. ${METIERS[v.metier]?.lieu ? `Ton métier : ${libelleMetier(v).toLowerCase()} (lieu de travail habituel : ${LIEUX[METIERS[v.metier].lieu].nom}).` : `Ta situation : ${libelleMetier(v).toLowerCase()}, sans métier confié.`}`);
   if (v.identite) L.push(`Ce que tu écris de toi : ${v.identite}`);
   L.push(`Ton foyer : ${maison?.nom || 'ta maison'}, ${occupants} personne(s) pour ${couchages} couchage(s)${famille ? `. Ta famille : ${famille}` : '. Tu vis seul'}.`);
+  if (disparus.length) L.push(`Ceux que tu as perdus : ${disparus.join(' ; ')}.`);
+  for (const t of attendus) L.push(t);
   L.push('');
   L.push(`Ce que tu ressens : ${etatCorps(v)}`);
   const p = v.poche;
@@ -135,6 +145,7 @@ export function infosVillage(sim) {
   L.push(`- Le conseil paie ${sim.salaire} pièce(s) par heure travaillée.${sim.projet && !sim.projet.enAttente ? ` Un chantier est ouvert : ${sim.projet.nom}.` : ''}${sim.navire ? ' Un navire marchand est au port.' : ''}`);
   const libres = sim.maisonsLibres();
   if (libres.length) L.push(`- Maison(s) libre(s) : ${libres.map((b) => `${b.id} (${b.nom})`).join(', ')}.`);
+  L.push('- Le temps : une année dure ici deux jours (un mois, quatre heures).');
   L.push(`- Les habitants : ${sim.roster()}`);
   return L.join('\n');
 }

@@ -91,7 +91,8 @@ for (let m = 0; m < 24 * 60 * 5; m++) {
     for (const k of Object.keys(sim.res)) assert.ok(sim.res[k] >= -1e-6 && Number.isFinite(sim.res[k]), `ressource ${k} valide`);
   }
 }
-assert.ok(sim.habitants.every((v) => v.nbDecisions > 5), 'chacun a décidé de nombreuses fois');
+assert.ok(sim.habitants.filter((v) => !v.nourrisson).every((v) => v.nbDecisions > 5), 'chacun a décidé de nombreuses fois');
+assert.ok(sim.habitants.filter((v) => v.nourrisson).every((v) => v.nbDecisions === 0 && v.statut === 'agit'), 'un nourrisson n\'est jamais sollicité, même témoin d\'un vol');
 assert.ok(surTerre / controles > 0.97, 'les habitants restent sur la terre ferme');
 assert.ok(sim.stats.paroles > 50, 'des paroles ont été échangées');
 assert.ok(sim.flux.some((f) => f.type === 'parole' && f.a != null), 'des paroles adressées à quelqu’un');
@@ -99,7 +100,7 @@ assert.ok(sim.stats.salaires > 0, 'des salaires ont été versés');
 assert.ok(sim.habitants.some((v) => v.evenements.length || v.souvenirs.length), 'des événements perçus et des souvenirs écrits par eux');
 
 // --- Lois du monde, vérifiées une à une ---
-const a = sim.habitants[10], b = sim.habitants[11];
+const a = sim.habitant(10), b = sim.habitant(11);
 a.statut = 'attend'; b.statut = 'attend';
 a.x = b.x = 10; a.z = b.z = 40; a.interieur = b.interieur = false; a.batiment = b.batiment = null;
 a.path = b.path = null; a.conversation = b.conversation = null;
@@ -116,17 +117,18 @@ sim.marquerEnvoye(a.id);
 sim.appliquer(a.id, { pensee: '', humeur: 50, action: 'voler_en_avion', parole: '' });
 assert.ok(a.evenements.some((e) => /pas possible/.test(e.texte)), 'une action inexistante est refusée avec une explication');
 // le travail demande de la forme
-const rendement = (e) => { const v = sim.habitants[20]; v.besoins.energie = e; v.besoins.faim = 80; v.besoins.soif = 80; v.besoins.sante = 90; v.malade = false; return sim.rendement(v); };
+const rendement = (e) => { const v = sim.habitant(20); v.besoins.energie = e; v.besoins.faim = 80; v.besoins.soif = 80; v.besoins.sante = 90; v.malade = false; return sim.rendement(v); };
 assert.ok(rendement(90) > rendement(10) * 1.5, 'épuisé, on travaille moins bien');
 
 // --- Sauvegarde ---
 const json = sim.serialiser();
 const sim2 = Simulation.charger(json);
+assert.equal(sim2.habitants.length, sim.habitants.length, "même population après rechargement");
+assert.equal(sim2.defunts.length, sim.defunts.length, "les défunts sont conservés");
 sim2.update(60);
-assert.equal(sim2.habitants.length, 50);
 assert.ok(sim2.habitants.every((v) => v.statut !== 'reflechit'), 'les pensées en cours sont relancées au chargement');
 assert.ok(sim2.interieur.length > 0 && sim2.interieur.length === sim.interieur.length, 'la vie intérieure est sauvegardée');
 
-console.log(`Monde : 5 jours, ${sim.stats.decisions} décisions (fixture aléatoire), ${sim.stats.paroles} paroles, ${sim.stats.dons} dons, ${sim.stats.prises} prises, ${sim.stats.disputes} disputes, ${sim.stats.achats} achats.`);
+console.log(`Monde : 5 jours (an ${sim.annee}), ${sim.habitants.length} vivants, ${sim.stats.deces} décès, ${sim.stats.naissances} naissances, ${sim.stats.decisions} décisions (fixture aléatoire), ${sim.stats.paroles} paroles, ${sim.stats.dons} dons, ${sim.stats.prises} prises, ${sim.stats.disputes} disputes, ${sim.stats.achats} achats.`);
 console.log(`Caisse du conseil : ${Math.round(sim.res.pieces)} pièces · marché : ${Math.round(sim.res.nourriture)} rations · foyers : ${Math.round(sim.nourritureFoyers())} rations`);
 console.log(`Sauvegarde ${(json.length / 1024).toFixed(0)} Ko rechargée. OK en ${Date.now() - t0} ms`);

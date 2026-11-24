@@ -12,6 +12,10 @@ Code : `src/sim/simulation.js`, `monde.js`, `data.js`, `navigation.js`.
 - **L'espace** : cartes, bâtiments, trajets, temps de marche.
 - **Les actions possibles** : dormir, manger, boire, travailler, aller, parler, donner, prendre, acheter, se soigner, prier, se reposer, flâner, étudier, jouer, puiser de l'eau, emménager, rien. Chaque action a des effets physiques. **Aucune n'est déclenchée par le jeu à la place de l'habitant.**
 - **Le conseil** (le joueur) : annonces, réponses aux demandes, prix, salaires, dons, amendes, métiers confiés, chantiers.
+- **Le calendrier et le cycle de vie** (`src/sim/vie.js`) : une année du village dure 2 jours (un mois : 4 h, une semaine : environ 55 min). Les corps vieillissent en continu.
+  - **Mort** : un corps sans santé pendant 2 heures s'éteint ; sinon risque horaire selon l'âge (loi de Gompertz : 0,07 %/an à 20 ans, environ 3 %/an à 70 ans, 15 %/an à 90 ans), la maladie et la faiblesse. Une maladie guérit en général seule (4 %/heure). À la mort, le jeu ne fait que constater : l'argent passe à un proche, les provisions restent à la maison, les dettes s'éteignent, tout le village l'apprend comme un fait. **Le deuil, la prière, les souvenirs, ce qu'on en dit viennent des habitants.**
+  - **Enfant** : action `avoir_un_enfant` (aller vers une personne pour lui dire qu'on voudrait un enfant avec elle). La loi : deux adultes de 17 ans ou plus, un homme et une femme (45 ans au plus), qui ne sont pas de la même famille, la femme n'attendant pas déjà un enfant. **Il faut que les deux le décident, chacun de son côté** ; sinon rien. Grossesse de 9 mois (36 h de jeu). **Le prénom est donné par les parents** (champ `prenom_enfant`).
+  - **Nourrissons** (moins de 2 ans) : ils ne décident pas encore ; la maison les nourrit (loi du monde) et s'il n'y a plus de provisions leur corps faiblit. À 2 ans, ils commencent à décider, avec une mémoire vide.
 
 ## 2. Ce qui vient des habitants (un modèle de langage, à chaque décision)
 
@@ -56,6 +60,7 @@ Ce que ton corps peut faire dans ce monde, une chose à la fois :
 - jouer : jouer dans la cour de l'école.
 - puiser_eau : remplir ta cruche à la source et la rapporter chez toi.
 - emmenager : t'installer dans une maison libre (champ "lieu" : l'identifiant de la maison).
+- avoir_un_enfant : aller vers une personne (champ "personne") pour lui dire que tu voudrais un enfant avec elle ; l'enfant n'est attendu que si elle le veut aussi.
 - rien : attendre un peu.
 
 Réponds uniquement par un objet JSON :
@@ -68,13 +73,15 @@ Réponds uniquement par un objet JSON :
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
 - "identite" : si tu veux écrire ou réécrire qui tu es (facultatif).
+- "prenom_enfant" : si ton enfant vient de naître et n'a pas encore de prénom, celui que tu lui donnes (facultatif).
 - "requete_conseil" : un message au conseil du village, si tu as quelque chose à lui demander ou dire (facultatif).
 
-FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "requete_conseil"). Ta pensée et ta parole peuvent être aussi longues ou aussi courtes que tu veux. Forme seulement (les "..." sont à remplacer par tes mots et ton choix) : {"habitants": [{"id": 3, "pensee": "...", "humeur": 0, "action": "...", "parole": "..."}]}
+FORMAT DE TA RÉPONSE : uniquement un objet JSON de la forme {"habitants": [...]}, avec un objet par habitant, dans l'ordre donné. Chaque objet a la clé "id" (le numéro de l'habitant) et les clés décrites ci-dessus ("pensee", "humeur", "action", "parole", et seulement si besoin "lieu", "personne", "objet", "quantite", "pret", "duree_minutes", "ton", "souvenir", "avis_sur", "avis", "identite", "prenom_enfant", "requete_conseil"). Ta pensée et ta parole peuvent être aussi longues ou aussi courtes que tu veux. Forme seulement (les "..." sont à remplacer par tes mots et ton choix) : {"habitants": [{"id": 3, "pensee": "...", "humeur": 0, "action": "...", "parole": "..."}]}
 
 Le village :
 - Marché : 150 ration(s) à vendre, 1 pièce(s) la ration ; remède : 5 pièces. Eau gratuite à la source.
 - Le conseil paie 1 pièce(s) par heure travaillée.
+- Le temps : une année dure ici deux jours (un mois, quatre heures).
 - Les habitants : Odeh (Youssef, Aïcha, Bassam, Mona) ; Qasem (Salim, Zeina, Sami, Jamal) ; Shahin (Adam, Dana, Suha) ; Zayed (Ibrahim, Samira, Mahmoud, Issa) ; Haddad (Tarek, Aya, Hani) ; Jaber (Lina, Ghada, Sara) ; Khoury (Nidal, Reem, Tala, Majd) ; Sabbagh (Ziad, Huda, Fadi) ; Farah (Omar, Siham, Layla, Widad) ; Awad (Rami, Rasha, Yazan, Elias) ; Saleh (Mounir, Jamila, Khalil) ; Mansour (Hassan, Amir, Dalia) ; Nasser (Nabil, Malak, Salma) ; Hamdan (Fares, Fatima, Walid, Haneen, Anas)
 
 === Habitant id=3 ===
@@ -87,7 +94,7 @@ Ce que tu ressens : tu n'as pas faim, tu as un peu soif, tu es en forme, tu te s
 Tu as 36 pièce(s) sur toi. Chez toi : 20 ration(s), 16 dose(s) d'eau.
 
 Où tu es : chez toi.
-Autour de toi : Youssef Odeh (49 ans, pêcheur) est là, sans rien faire de précis ; Aïcha Odeh (52 ans, bâtisseuse) est là, sans rien faire de précis ; Bassam Odeh (7 ans, élève) est là, sans rien faire de précis.
+Autour de toi : Youssef Odeh (49 ans, agriculteur) est là, sans rien faire de précis ; Aïcha Odeh (52 ans, bâtisseuse) est là, sans rien faire de précis ; Bassam Odeh (7 ans, élève) est là, sans rien faire de précis.
 
 Ce que tu retiens de ta vie : (exemple) Résumé écrit par l’habitant.
 Ce que tu as compris de la vie ici : (exemple) Leçons écrites par l’habitant.
@@ -130,9 +137,10 @@ Réponds maintenant par l'objet JSON (1 habitants).
 - **Priorité de parole** : quand le conseil parle à un habitant ou qu'on lui parle, il repasse en tête de file pour répondre.
 - **Quand un modèle est indisponible**, l'habitant garde son tour et attend ; il n'est pas réduit à « ne rien faire ».
 - **Les sensations** sont des phrases du jeu (« tu as soif », « tu es fatigué ») choisies selon des seuils : c'est la perception du corps, pas une consigne.
+- **Exceptions à « tout vient des habitants »** : le village donne un prénom à un nouveau-né si ses parents n'en choisissent pas en 12 h de jeu ; les nourrissons ne décident pas ; les liens de parenté de départ (couples, enfants) et les âges initiaux (3 à 82 ans) sont posés par le jeu ; un habitant qui devient adulte ou entre à l'école change de statut automatiquement (6 ans, 17 ans).
 - **Aucune conscience réelle** : ce sont des textes produits par un modèle de langage. L'écran d'accueil le dit.
 
 ## 5. Comment vérifier
 
-- `npm test` : lois du monde, absence de consignes de comportement dans les textes envoyés, bilan du soir, relais entre modèles.
+- `npm test` : lois du monde (dont le cycle de vie : `tests/vie.test.mjs`), absence de consignes de comportement dans les textes envoyés, bilan du soir, relais entre modèles.
 - Onglet **Paroles** du jeu : ce que disent, pensent, retiennent et se demandent les habitants, avec « avant / après » pour leur description et leurs leçons.
