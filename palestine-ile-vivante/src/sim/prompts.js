@@ -7,7 +7,7 @@
 
 export const ACTIONS = [
   'dormir', 'manger', 'boire', 'travailler', 'aller', 'parler', 'donner', 'demander', 'prendre', 'acheter',
-  'se_soigner', 'prier', 'se_reposer', 'flaner', 'etudier', 'jouer', 'puiser_eau', 'emmenager', 'avoir_un_enfant', 'rien',
+  'se_soigner', 'prier', 'se_reposer', 'flaner', 'etudier', 'jouer', 'puiser_eau', 'emmenager', 'avoir_un_enfant', 'autre', 'rien',
 ];
 
 export const LIEUX_IDS = [
@@ -41,6 +41,7 @@ Ce que ton corps peut faire dans ce monde, une chose à la fois :
 - puiser_eau : remplir ta cruche à la source et la rapporter chez toi.
 - emmenager : t'installer dans une maison libre (champ "lieu" : l'identifiant de la maison).
 - avoir_un_enfant : aller vers une personne (champ "personne") pour lui dire que tu voudrais un enfant avec elle ; l'enfant n'est attendu que si elle le veut aussi.
+- autre : faire autre chose que tout ce qui précède, ce que tu veux (champ "intention" : ce que tu fais, avec tes mots ; "lieu" : où, si tu veux changer d'endroit ; "duree_minutes"). Le monde ne répond à ce geste que par le temps qui passe et la fatigue ; les personnes autour de toi voient ce que tu fais.
 - rien : attendre un peu.
 
 Réponds uniquement par un objet JSON :
@@ -75,6 +76,7 @@ export const SCHEMA_DECISION = {
     pensee: { type: 'string' },
     humeur: { type: 'integer' },
     action: { type: 'string', enum: ACTIONS },
+    intention: { type: 'string' },
     lieu: { type: 'string' },
     personne: { type: 'string' },
     objet: { type: 'string', enum: ['nourriture', 'eau', 'pieces', 'remedes', 'huile', 'rien'] },

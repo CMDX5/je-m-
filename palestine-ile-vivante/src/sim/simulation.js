@@ -28,12 +28,12 @@ const VITESSE_MARCHE = 1.45;
 const RENDU = {
   dormir: 'dormir', manger: 'manger', boire: 'manger', travailler: 'travailler', aller: 'flaner', parler: 'socialiser',
   donner: 'aider', demander: 'socialiser', prendre: 'socialiser', acheter: 'socialiser', se_soigner: 'soigner', prier: 'prier', se_reposer: 'rester',
-  flaner: 'flaner', etudier: 'ecole', jouer: 'jouer', puiser_eau: 'travailler', emmenager: 'rester', rien: 'rester', avoir_un_enfant: 'socialiser',
+  flaner: 'flaner', etudier: 'ecole', jouer: 'jouer', puiser_eau: 'travailler', emmenager: 'rester', rien: 'rester', avoir_un_enfant: 'socialiser', autre: 'rester',
 };
 const ETAT = {
   dormir: 'Dort', manger: 'Mange', boire: 'Boit', travailler: 'Travaille', aller: 'Se rend quelque part', parler: 'Parle à quelqu’un',
   donner: 'Donne quelque chose', demander: 'Demande quelque chose', prendre: 'Prend quelque chose', acheter: 'Achète au marché', se_soigner: 'Se fait soigner', prier: 'Prie',
-  se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend', avoir_un_enfant: 'Parle à quelqu’un',
+  se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend', avoir_un_enfant: 'Parle à quelqu’un', autre: 'Fait quelque chose',
 };
 const TON = { chaleureux: 'd’un ton chaleureux', tendu: 'd’un ton tendu', colere: 'avec colère', triste: 'd’un ton triste', joyeux: 'd’un ton joyeux' };
 // Les mots de l'habitant pour un objet (« une ration », « du pain », « médicaments »…) → l'objet du monde.
@@ -762,7 +762,7 @@ export class Simulation {
     const ton = clip(d.ton, 24).toLowerCase();
     const objet = nomObjet(d.objet) || (action === 'acheter' ? 'nourriture' : null);
     const qte = clamp(Number(d.quantite) || 1, 0, 200);
-    const spec = { action, parole, ton, objet, qte, pret: !!d.pret, dispute: d.dispute === true || d.dispute === 'true' };
+    const spec = { action, intention: action === 'autre' ? clip(d.intention, 140) : '', parole, ton, objet, qte, pret: !!d.pret, dispute: d.dispute === true || d.dispute === 'true' };
     const cible = d.personne ? this.personne(d.personne) : null;
     if (cible?.nourrisson && action !== 'aller') return this.invalide(v, `${cible.prenom} est un nourrisson`);
     if (v.reposJusqua > this.temps && action === 'travailler') noter(v, this.temps, 'Le conseil t’a accordé un jour de repos.');
@@ -779,6 +779,13 @@ export class Simulation {
       case 'etudier': spec.duree = clamp(duree || 120, 30, 240); spec.res = { cle: 'ecole' }; break;
       case 'jouer': spec.duree = clamp(duree || 45, 10, 120); spec.res = { cle: 'cour_ecole' }; break;
       case 'rien': spec.duree = clamp(duree || 15, 5, 60); spec.ici = true; break;
+      case 'autre': {
+        // Tout geste est permis ; le monde n'y répond que par le temps, la fatigue et le regard des autres.
+        if (!spec.intention) return this.invalide(v, "tu n'as pas dit ce que tu voulais faire");
+        const r = d.lieu ? this.resoudreLieu(v, d.lieu) : null;
+        if (r) spec.res = r; else spec.ici = true;
+        spec.duree = clamp(duree || 30, 5, 240); break;
+      }
       case 'flaner': {
         const r = this.resoudreLieu(v, d.lieu) || { cle: this.rng.pick(['plage', 'belvedere', 'port', 'source']) };
         spec.res = r; spec.duree = clamp(duree || 40, 10, 180); break;
@@ -854,7 +861,7 @@ export class Simulation {
     v.statut = 'agit';
     v.priorite = false;
     const a = {
-      type: RENDU[spec.action], action: spec.action, etat: spec.cible && spec.action !== 'parler' ? `${ETAT[spec.action]} (${spec.cible.prenom})` : spec.cible ? `${ETAT[spec.action]} (${spec.cible.prenom})` : ETAT[spec.action],
+      type: RENDU[spec.action], action: spec.action, etat: spec.action === 'autre' ? spec.intention : spec.cible && spec.action !== 'parler' ? `${ETAT[spec.action]} (${spec.cible.prenom})` : spec.cible ? `${ETAT[spec.action]} (${spec.cible.prenom})` : ETAT[spec.action],
       debut: this.temps, fin: this.temps + 600, duree: spec.duree || 20,
       cibleId: spec.cible?.id, objet: spec.objet, qte: spec.qte, pret: spec.pret, parole: spec.parole, ton: spec.ton, dispute: spec.dispute,
       bilan: { nourriture: 0, pieces: 0, pierre: 0, bois: 0, huile: 0, remedes: 0, paye: 0, minutes: 0 },
@@ -874,9 +881,10 @@ export class Simulation {
     if (!lieu) return this.invalide(v, "tu ne trouves pas ce lieu");
     a.lieuCle = spec.res?.cle || (spec.res?.maison ? 'maison' : null);
     Object.assign(a, lieu);
-    if (!['dormir', 'manger', 'boire', 'rien', 'se_reposer'].includes(spec.action) && lieu.nomLieu && !spec.cible) a.etat = `${ETAT[spec.action]} — ${lieu.nomLieu}`;
+    if (!['dormir', 'manger', 'boire', 'rien', 'se_reposer'].includes(spec.action) && lieu.nomLieu && !spec.cible) a.etat = spec.action === 'autre' ? (spec.ici ? spec.intention : `${spec.intention} — ${lieu.nomLieu}`) : `${ETAT[spec.action]} — ${lieu.nomLieu}`;
     v.activite = a;
     v.path = null;
+    if (spec.action === 'autre') noter(v, this.temps, `Tu te mets à : ${spec.intention}.`);
     if (spec.ici) { a.arrive = this.temps; a.fin = this.temps + a.duree; return; }
     this.allerVers(v, lieu.x, lieu.z);
   }

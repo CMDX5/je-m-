@@ -77,4 +77,29 @@ const dehors = (v, x = 0, z = 10) => { v.interieur = false; v.batiment = null; v
   assert.equal(sim.stats.disputes, 1, 'la dispute déclarée par l\'habitant est bien prise en compte');
 }
 
+// ---- « autre » : un geste libre, hors de la liste ; le monde n'y répond que par le temps, la fatigue et le regard des autres ----
+{
+  const sim = nouveau();
+  const [v, w] = sim.habitants.filter((h) => h.age > 20);
+  dehors(v, 4, 12); dehors(w, 6, 12);
+  const avant = sim.log.length;
+  sim.executer(v, { action: 'autre', intention: 'je dessine des bateaux dans le sable', duree_minutes: 45 });
+  assert.equal(v.activite.action, 'autre');
+  assert.equal(v.activite.etat, 'je dessine des bateaux dans le sable', 'l\'état affiché est ce que l\'habitant a dit faire');
+  assert.ok(v.evenements.at(-1).texte.includes('je dessine des bateaux'), 'cela fait partie de ce qui vient de lui arriver');
+  assert.equal(v.activite.duree, 45);
+  assert.match(sim.construirePrompt(w.id), /je dessine des bateaux dans le sable/, 'les autres voient ce qu\'il fait');
+  // aller ailleurs pour le faire
+  sim.executer(w, { action: 'autre', intention: 'je regarde les vagues', lieu: 'plage', duree_minutes: 20 });
+  assert.match(w.activite.etat, /je regarde les vagues — /); assert.equal(w.activite.lieuCle, 'plage');
+  // sans dire quoi, rien ne se passe : il est prévenu
+  sim.executer(v, { action: 'autre' });
+  assert.equal(v.activite.action, 'rien'); assert.match(v.evenements.at(-1).texte, /pas dit ce que tu voulais faire/);
+  // le geste ne donne rien : ni ration, ni pièces, ni santé
+  const p0 = v.poche.pieces, s0 = v.besoins.sante;
+  sim.executer(v, { action: 'autre', intention: 'je construis un château de pierres', duree_minutes: 30 });
+  sim.update(31);
+  assert.equal(v.poche.pieces, p0, 'le monde ne paie pas un geste libre');
+}
+
 console.log('Gestes sociaux : demander (porté, jamais exaucé à sa place), dispute déclarée ou reconnue. OK');
