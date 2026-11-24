@@ -203,6 +203,21 @@ export function creerPuits(b) {
   return placer(g, b);
 }
 
+// Halle ombragée : une toile tendue sur des poteaux, ouverte sur les côtés, avec des bancs dessous.
+export function creerHalle(b) {
+  const g = new THREE.Group();
+  const H = 3.2;
+  for (const x of [-b.w / 2 + 0.3, 0, b.w / 2 - 0.3]) for (const z of [-b.d / 2 + 0.3, b.d / 2 - 0.3]) g.add(cyl(0.14, 0.17, H, 7, bois, x, H / 2, z));
+  for (const z of [-b.d / 2 + 0.3, b.d / 2 - 0.3]) g.add(box(b.w, 0.16, 0.2, bois, 0, H, z));
+  for (const x of [-b.w / 2 + 0.3, 0, b.w / 2 - 0.3]) g.add(box(0.2, 0.16, b.d, bois, x, H, 0));
+  const toit = box(b.w + 0.8, 0.1, b.d + 0.8, toile[1], 0, H + 0.18, 0);
+  toit.rotation.x = 0.07;
+  g.add(toit);
+  g.add(box(b.w + 0.9, 0.12, 0.12, toile[0], 0, H + 0.12, (b.d + 0.8) / 2));
+  for (const x of [-2.2, 2.2]) g.add(box(2.6, 0.12, 0.6, boisClair, x, 0.5, 0), box(0.12, 0.5, 0.5, bois, x - 1.1, 0.25, 0), box(0.12, 0.5, 0.5, bois, x + 1.1, 0.25, 0));
+  return placer(g, b);
+}
+
 function creerMarche(scene, rng) {
   const g = new THREE.Group();
   const y = heightAt(PLAZA.x, PLAZA.z);
@@ -344,7 +359,7 @@ export class Chantier {
       const { x, z } = projet.site;
       const y = heightAt(x, z);
       g.position.set(x, y, z);
-      const w = projet.cle === 'puits' ? 3 : 7;
+      const w = projet.cle === 'puits' ? 3 : projet.cle === 'halle' ? 8 : 7;
       this.vol = box(w, 1, w * 0.85, pierre[0], 0, 0, 0);
       g.add(this.vol);
       const ech = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 1, 4, w * 0.85 + 1, 2, 2, 2)), new THREE.LineBasicMaterial({ color: 0x6b4a2e }));
@@ -354,7 +369,7 @@ export class Chantier {
       g.add(box(3, 0.2, 0.3, bois, -w / 2 - 1.6, 0.2, 0), box(3, 0.2, 0.3, bois, -w / 2 - 1.6, 0.4, 0.4));
       this.scene.add(g);
       this.g = g;
-      this.hauteur = projet.cle === 'puits' ? 1.2 : 3.4;
+      this.hauteur = projet.cle === 'puits' ? 1.2 : projet.cle === 'halle' ? 3.2 : 3.4;
     }
     const t = projet.enAttente ? 0.02 : Math.min(1, projet.progres / projet.travail);
     const h = Math.max(0.1, t * this.hauteur);
@@ -391,6 +406,7 @@ export class Village {
       case 'atelier': g = creerAtelier(b); break;
       case 'entrepot': g = creerEntrepot(b); break;
       case 'puits': g = creerPuits(b); break;
+      case 'halle': g = creerHalle(b); break;
       default: return;
     }
     this.scene.add(g);

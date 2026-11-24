@@ -94,7 +94,7 @@ export class Simulation {
     this.dettes = [];
     this.monde = creerMonde();
     this.foyers = {};
-    this.bonus = { jetee: false, puits: false, ecole: false };
+    this.bonus = { jetee: false, puits: false, ecole: false, halle: false };
     this.projet = null;
     this.meteo = { tempete: 0, secheresse: 0, bonnePeche: 0 };
     this.etatSaison = saison(this.temps); // pluie, beau temps, chaleur, saison sèche : fonction du temps
@@ -507,7 +507,7 @@ export class Simulation {
     const dehors = !v.interieur;
     b.faim = clamp(b.faim - (dort ? 0.03 : 0.06) * dt, 0, 100);
     // la chaleur de la saison assèche plus vite, surtout dehors et en plein jour
-    const chaud = 1 + 0.7 * this.etatSaison.chaleur * (lumiere(h) > 0 ? 1 : 0.3) * (dehors ? 1 : 0.35);
+    const chaud = 1 + 0.7 * this.etatSaison.chaleur * (lumiere(h) > 0 ? 1 : 0.3) * (dehors && !this.sousLaHalle(v) ? 1 : 0.35);
     b.soif = clamp(b.soif - (dort ? 0.05 : 0.1) * chaud * dt, 0, 100);
     if (dort) {
       const confort = v.interieur && v.batiment === v.foyer ? confortFoyer(this.occupants(v.foyer), this.couchages(v.foyer)) : 0.5;
@@ -1285,6 +1285,13 @@ export class Simulation {
     this.pertesJour = (this.pertesJour || 0) + perte;
   }
 
+  // À l'ombre de la halle du marché, la chaleur pèse comme à l'intérieur d'une maison.
+  sousLaHalle(v) {
+    if (!this.bonus.halle) return false;
+    const h = this.batimentsParId.halle;
+    return !!h && Math.abs(v.x - h.x) < h.w / 2 + 1 && Math.abs(v.z - h.z) < h.d / 2 + 1;
+  }
+
   // La caisse du conseil, en jours de salaires (d'après ce qui a été versé hier) ; null tant qu'on ne le sait pas.
   joursDeCaisse() {
     const h = this.historique.at(-1);
@@ -1345,6 +1352,7 @@ export class Simulation {
 
   siteProjet(cle) {
     if (cle === 'puits') return { x: 13, z: 24 };
+    if (cle === 'halle') return { x: PLAZA.x, z: PLAZA.z + 5.5 }; // sur la place du marché, entre les étals
     if (cle === 'jetee') return { x: 2, z: 61 };
     if (cle === 'ecole') return { ...this.batiment('ecole').door };
     const spot = FREE_HOUSE_SPOTS.find(([x, z]) => !this.batiments.some((b) => Math.hypot(b.x - x, b.z - z) < 5));
@@ -1382,6 +1390,7 @@ export class Simulation {
       bat = makeBuilding(`maison-${n}`, 'maison', 'Nouvelle maison', p.site.x, p.site.z, 8, 7, Math.atan2(PLAZA.x - p.site.x, PLAZA.z - p.site.z), { etages: 1 });
       this.foyers[bat.id] = { nourriture: 0, eau: 0, pertes: [] };
     } else if (p.cle === 'puits') bat = makeBuilding('puits', 'puits', 'Puits communal', p.site.x, p.site.z, 3, 3, 0);
+    else if (p.cle === 'halle') bat = makeBuilding('halle', 'halle', 'Halle ombragée', p.site.x, p.site.z, 9, 4, 0);
     this.bonus[p.cle] = true;
     if (bat) { bat.ajoute = true; this.batiments.push(bat); this.batimentsParId[bat.id] = bat; this.nav.blockBuilding(bat); }
     this.annoncerEvenement(`Le chantier « ${p.nom} » est terminé : ${PROJETS[p.cle].effet}.`);

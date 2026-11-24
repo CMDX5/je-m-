@@ -45,6 +45,46 @@ const placer = (sim, mois) => { sim.temps = DEBUT_PLUIE_MIN + mois * MOIS_MIN; s
   assert.ok(!/puits communal/.test(sans.construirePrompt(5)));
 }
 
+// ---- la halle ombragée du marché : l'abri frais demandé par les habitants ----
+{
+  const sim = nouveau(); sim.rng.chance = () => false;
+  placer(sim, 6); // pleine chaleur
+  const avant = { bois: sim.res.bois, pierre: sim.res.pierre };
+  assert.deepEqual(sim.lancerProjet('halle'), { ok: true });
+  assert.ok(sim.res.bois < avant.bois && sim.res.pierre < avant.pierre, 'le chantier consomme du bois et de la pierre');
+  assert.deepEqual(sim.siteProjet('halle'), { x: 4, z: 17.5 }, 'sur la place du marché');
+  assert.equal(sim.bonus.halle, false);
+  sim.projet.progres = sim.projet.travail; sim.terminerProjet();
+  assert.equal(sim.bonus.halle, true);
+  const halle = sim.batimentsParId.halle;
+  assert.ok(halle && sim.batiments.includes(halle) && halle.ajoute);
+  assert.equal(sim.lancerProjet('halle').ok, false, 'une seule halle');
+  assert.ok(sim.nav.walkable(halle.x, halle.z), 'on passe sous la halle : elle ne bloque rien');
+  assert.match(sim.construirePrompt(5), /halle ombragée, sur la place du marché, abrite de la chaleur/, 'les habitants le savent');
+
+  // à l'ombre de la halle, la chaleur pèse comme à l'intérieur ; à côté, en plein soleil, non
+  const mesure = (x, z) => {
+    const v = sim.habitants.find((h) => h.age > 20);
+    v.interieur = false; v.batiment = null; v.statut = 'agit'; v.path = null; v.x = x; v.z = z;
+    v.activite = { type: 'rester', action: 'rien', fin: 1e12, duree: 1e6, bilan: {} };
+    v.besoins.soif = 90; sim.temps = Math.floor(sim.temps / 1440) * 1440 + 12 * 60; sim.update(60);
+    return 90 - v.besoins.soif;
+  };
+  const ombre = mesure(halle.x, halle.z), soleil = mesure(halle.x + 20, halle.z);
+  const base = 6; // soif d'une heure sans aucune chaleur (0,1 point par minute)
+  assert.ok(soleil > base * 1.4, `en plein soleil la chaleur ajoute beaucoup (${soleil.toFixed(1)} points en une heure)`);
+  assert.ok(ombre < soleil && (ombre - base) < (soleil - base) * 0.5, `sous la halle, au moins la moitié de la soif due à la chaleur disparaît (${ombre.toFixed(1)} contre ${soleil.toFixed(1)})`);
+  assert.ok(sim.sousLaHalle({ x: halle.x + 5, z: halle.z }) && !sim.sousLaHalle({ x: halle.x + 8, z: halle.z }), 'l\'ombre s\'arrête au bord de la toile');
+
+  // rechargement : la halle est toujours là, toujours ouverte, toujours efficace
+  const copie = Simulation.charger(sim.serialiser());
+  assert.equal(copie.bonus.halle, true);
+  assert.ok(copie.batimentsParId.halle && copie.nav.walkable(halle.x, halle.z));
+  assert.ok(copie.sousLaHalle({ x: halle.x, z: halle.z }));
+  const sans = nouveau();
+  assert.ok(!/halle ombragée/.test(sans.construirePrompt(5)));
+}
+
 // ---- la caisse en jours de salaires ----
 {
   const sim = nouveau();

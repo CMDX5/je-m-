@@ -155,6 +155,7 @@ export function infosVillage(sim) {
   const E = sim.etatSaison;
   L.push(E.nom === 'pluie' ? `- Saison : c'est le mois de la pluie (la seule de l'année, elle dure ${Math.max(1, Math.ceil(E.resteDePluie / 60))} h de plus).` : `- Saison : mois ${E.mois} sur 12 ; la pluie revient dans ${Math.max(1, Math.ceil(E.jusquaPluie / MOIS_MIN))} mois.`);
   if (sim.bonus.puits) L.push('- Le puits communal remplit peu à peu les jarres des maisons.');
+  if (sim.bonus.halle) L.push('- Une halle ombragée, sur la place du marché, abrite de la chaleur.');
   L.push(`- Les habitants : ${sim.roster()}`);
   return L.join('\n');
 }
