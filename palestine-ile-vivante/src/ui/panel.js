@@ -241,11 +241,14 @@ export class Interface {
       const q = s.projet;
       const vol = s.habitants.filter((v) => v.activite?.lieuCle === 'chantier' && v.statut === 'agit').length;
       out += `<div class="carte-bloc"><b>${esc(q.nom)}</b> — ${q.enAttente ? 'en attente de matériaux' : `${Math.floor((q.progres / q.travail) * 100)} %`}${barre(q.progres, q.travail, true)}<p class="note">${PROJETS[q.cle].effet}. ${vol} habitant(s) y travaillent. Ils décident d'y aller ou non.</p><div class="boutons"><button class="btn" data-action="voir-chantier">Voir le chantier</button></div></div>`;
-    } else {
-      for (const [k, q] of Object.entries(PROJETS)) {
-        const fait = s.bonus[k] && k !== 'maison';
-        out += `<div class="ligne" style="justify-content:space-between"><span><b>${q.nom}</b><br><small class="note">${Object.entries(q.cout).map(([r, n]) => `${n} ${r}`).join(', ')} · ${q.effet}</small></span><button class="btn" data-action="projet" data-cle="${k}" ${fait ? 'disabled' : ''}>${fait ? 'Fait' : s.peutPayer(q.cout) ? 'Ouvrir' : 'Réserver'}</button></div>`;
-      }
+    }
+    // la liste des chantiers possibles reste visible : un seul chantier à la fois, les autres attendent la fin de celui-ci
+    out += s.projet ? '<h4>Les prochains chantiers</h4><p class="note">Un seul chantier à la fois : vous pourrez ouvrir les suivants quand celui-ci sera terminé.</p>' : '';
+    for (const [k, q] of Object.entries(PROJETS)) {
+      if (s.projet && k === s.projet.cle) continue;
+      const fait = s.bonus[k] && k !== 'maison';
+      const bloque = fait || !!s.projet;
+      out += `<div class="ligne" style="justify-content:space-between"><span><b>${q.nom}</b><br><small class="note">${Object.entries(q.cout).map(([r, n]) => `${n} ${r}`).join(', ')} · ${q.effet}</small></span><button class="btn" data-action="projet" data-cle="${k}" ${bloque ? 'disabled' : ''}>${fait ? 'Fait' : s.projet ? 'Après' : s.peutPayer(q.cout) ? 'Ouvrir' : 'Réserver'}</button></div>`;
     }
     out += `<h3>Commerce au port</h3>`;
     if (s.navire) {
