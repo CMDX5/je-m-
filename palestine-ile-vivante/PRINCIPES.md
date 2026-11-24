@@ -3,6 +3,29 @@
 Ce document est généré par `node tools/doc-principes.mjs` à partir du code. Il sert à vérifier une promesse :
 **le jeu programme le monde, jamais la pensée des habitants.**
 
+## 0. En un coup d'œil
+
+**Ce qui vient des habitants** (texte et choix produits par un modèle de langage, à chaque décision) :
+pensées, paroles et ton de la voix, humeur, action choisie, personne à qui parler, lieu où aller, souvenirs retenus, avis sur les autres, description de soi,
+questions qu'ils se posent, leçons tirées de leur vie, résumé de leur journée, demandes et avis adressés au conseil, choix d'aider, de discuter, d'acheter, de prendre, de donner ou de se disputer,
+**envie d'avoir un enfant et choix de la personne**, prénom donné à l'enfant, réactions à un décès, à la pluie ou à la chaleur.
+
+**Ce qui n'en vient pas** (programmé) :
+leur nom, âge, genre, famille, maison et métier de départ ; leur apparence 3D ; leur corps (faim, soif, fatigue, santé, sécurité) et son évolution ; la météo, les saisons, la date ;
+les ressources, prix, salaires, règles économiques, règles de construction ; la carte, les bâtiments, les routes, les déplacements, les collisions ; les maladies, les décès, la grossesse et la naissance biologique ;
+les conséquences physiques de leurs décisions ; les textes d'état (« dort », « travaille ») ; les boutons, menus, la chronique du jeu.
+
+**Ce que la liste ci-dessus oublie, et qui compte pour juger honnêtement :**
+- **Ce qu'ils perçoivent est écrit par le jeu** : les phrases de sensation (« tu as soif »), le résumé de la situation, les événements racontés (« X est mort »), le choix des souvenirs et des avis relus (les 18 derniers souvenirs, 4 avis récents), les règles du monde et la liste des gestes possibles. Le jeu ne leur dit pas quoi penser, mais il décide **ce qu'ils savent**.
+- **Le jeu interprète leurs mots** : un lieu, une personne ou un objet écrit librement (« du pain », « chez Aïcha ») est traduit en action du monde ; une action impossible est refusée avec la raison.
+- **Une dispute est détectée par le jeu** à partir du ton choisi par l'habitant (« colère », « tendu ») ; les mots échangés, eux, sont les leurs.
+- **Il n'y a pas d'action « demander »** : demander de l'argent, de la nourriture ou des soins se fait par la parole, une demande au conseil, ou par un achat, un don, une prise ; il n'y a pas non plus de champ « avis sur le conseil » : l'avis passe par la pensée, la parole ou la demande.
+- **« Relations personnelles »** : seuls leurs avis sur chacun sont à eux ; il n'existe pas de statut de relation (ami, couple…) calculé par le jeu, sauf les couples et parentés de départ.
+- **Exceptions** : le prénom d'un nouveau-né si les parents n'en choisissent pas (12 h de jeu) ; le sexe du bébé (tiré au hasard) ; les nourrissons (moins de 2 ans), qui ne décident pas ; l'entrée à l'école à 6 ans et le statut d'adulte à 17 ans.
+- **Une seule voix derrière plusieurs personnes** : un même modèle joue jusqu'à 8 habitants par appel ; ce sont des textes plausibles, pas des consciences.
+
+**En résumé** : le modèle leur donne une pensée, une parole et une décision. Le moteur du jeu leur donne un corps, des besoins, un monde avec des règles, **et la connaissance de ce qui les entoure** ; il exécute ensuite leur décision et en calcule les conséquences.
+
 ## 1. Ce qui est programmé (les lois du monde)
 
 Code : `src/sim/simulation.js`, `monde.js`, `data.js`, `navigation.js`.
