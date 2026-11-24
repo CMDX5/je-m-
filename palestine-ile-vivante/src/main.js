@@ -101,6 +101,36 @@ const habitants3d = new Habitants3D(scene, sim);
   });
 }
 
+// Le village ne vit que dans cette page : ce bouton demande au téléphone de garder l'écran allumé (branché, la nuit)
+{
+  const b = document.querySelector('#veille-ecran');
+  if (b && 'wakeLock' in navigator) {
+    b.hidden = false;
+    let verrou = null, voulu = false;
+    const prendre = async () => {
+      try {
+        verrou = await navigator.wakeLock.request('screen');
+        verrou.addEventListener('release', () => { verrou = null; });
+        return true;
+      } catch { verrou = null; return false; }
+    };
+    b.addEventListener('click', async () => {
+      if (!voulu) {
+        if (await prendre()) { voulu = true; ui.toast('Écran maintenu allumé : le village continue de vivre tant que cette page reste ouverte. Branchez votre téléphone.', 'conseil'); }
+        else ui.toast('Ce navigateur refuse de garder l’écran allumé.', 'mal');
+      } else {
+        voulu = false;
+        try { await verrou?.release(); } catch { /* déjà relâché */ }
+        verrou = null;
+        ui.toast('L’écran peut de nouveau s’éteindre : le village s’arrêtera avec lui.', 'conseil');
+      }
+      b.classList.toggle('actif', voulu);
+    });
+    // le navigateur relâche le verrou quand la page est cachée : on le reprend au retour
+    document.addEventListener('visibilitychange', () => { if (voulu && document.visibilityState === 'visible' && !verrou) prendre(); });
+  }
+}
+
 sim.on('construction', ({ cle, batiment }) => {
   if (batiment) village.ajouterBatiment(batiment);
   if (cle === 'jetee') village.renforcerJetee();
