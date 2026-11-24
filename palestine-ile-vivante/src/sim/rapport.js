@@ -10,6 +10,7 @@ export function resumer(sim, penseur, erreursPage) {
   const r = {
     version: 1,
     moment: sim.horodatage(),
+    saison: { nom: sim.etatSaison.nom, mois: sim.etatSaison.mois, chaleur: Math.round(sim.etatSaison.chaleur * 100) / 100, seche: Math.round(sim.etatSaison.seche * 100) / 100 },
     population: { vivants: sim.habitants.length, defunts: sim.defunts.length, naissances: sim.stats.naissances || 0, deces: sim.stats.deces || 0, annee: sim.annee, nourrissons: sim.habitants.filter((v) => v.nourrisson).length, enceintes: sim.habitants.filter((v) => v.enceinte && !v.enceinte.accouche).length, prenomsAttendus: sim.naissancesEnAttente.length, causes: sim.defunts.slice(-6).map((d) => `${d.prenom} ${d.age} ans ${d.mort.cause}`) },
     penseur: penseur ? { mode: penseur.mode, modele: penseur.modele, fournisseur: penseur.fournisseurActuel || '', parFournisseur: penseur.parFournisseur || null, cles: penseur.cles ? Object.keys(penseur.cles).filter((f) => penseur.cles[f]) : [], ...penseur.stats, msMoyen: Math.round(penseur.stats.ms || 0), erreur: penseur.derniereErreur || '', technique: penseur.erreurTechnique || '', retires: penseur.retires || [], modeles: penseur.entrees ? penseur.entrees.map((e) => `${e.f}:${e.m}${e.principal ? '' : ' (secours)'}`) : [] } : null,
     stats: sim.stats,
@@ -33,9 +34,9 @@ export function resumer(sim, penseur, erreursPage) {
     erreursPage: erreursPage.slice(-5),
   };
   // la vie intérieure d'abord : les journaux d'hébergement coupent les longs messages par la fin
-  const { version, moment, population, bilans, interieur, echantillon, flux, corps, argent, vivres, actions: act, attente, requetes, stats, penseur: pen, nature, journal, erreursPage: err } = r;
+  const { version, moment, saison: sais, population, bilans, interieur, echantillon, flux, corps, argent, vivres, actions: act, attente, requetes, stats, penseur: pen, nature, journal, erreursPage: err } = r;
   if (pen) { pen.technique = String(pen.technique || '').replace(/\s+/g, ' ').slice(0, 140); pen.modeles = pen.modeles.length; }
-  return { version, moment, population, bilans, interieur, echantillon, flux: flux.slice(-10).map((f) => ({ ...f, texte: String(f.texte).slice(0, 200) })), corps, argent, vivres, actions: act, attente, requetes, stats, penseur: pen, nature, journal: journal.slice(-5), erreursPage: err };
+  return { version, moment, saison: sais, population, bilans, interieur, echantillon, flux: flux.slice(-10).map((f) => ({ ...f, texte: String(f.texte).slice(0, 200) })), corps, argent, vivres, actions: act, attente, requetes, stats, penseur: pen, nature, journal: journal.slice(-5), erreursPage: err };
 }
 
 export function demarrerRapports(sim, penseur, intervalleMs = 120000) {

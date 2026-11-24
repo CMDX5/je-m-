@@ -15,6 +15,8 @@ import { PRENOMS_H, PRENOMS_F, NOMS_FAMILLE, METIERS, METIERS_ADULTES, PROJETS, 
 import { creerHabitant, nomComplet, libelleMetier, noter, retenir } from './villager.js';
 import { ACTIONS } from './prompts.js';
 import { construirePrompt } from './perception.js';
+import { saison } from './saison.js';
+import { depuis } from './vie.js';
 import { ANNEE_MIN, MOIS_MIN, GROSSESSE_MOIS, AGE_NOURRISSON, AGE_ADULTE, AGE_FECOND_MAX, DELAI_PRENOM_MIN, VALIDITE_SOUHAIT_MIN, risqueDecesHoraire, causeDeces, ageEnAns } from './vie.js';
 import { creerMonde, regenerer, produire, recuperation, risqueMaladie, pressionCircadienne, confortFoyer, lumiere } from './monde.js';
 import { NavGrid } from './navigation.js';
@@ -93,6 +95,8 @@ export class Simulation {
     this.bonus = { jetee: false, puits: false, ecole: false };
     this.projet = null;
     this.meteo = { tempete: 0, secheresse: 0, bonnePeche: 0 };
+    this.etatSaison = saison(this.temps); // pluie, beau temps, chaleur, saison sèche : fonction du temps
+    this.saisonNom = this.etatSaison.nom;
     this.navire = 0;
     this.historique = [];
     this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, salaires: 0, naissances: 0, deces: 0 };
@@ -122,10 +126,18 @@ export class Simulation {
   get annee() { return Math.floor(this.temps / ANNEE_MIN) + 1; }
   batiment(id) { return this.batimentsParId[id]; }
   meteoTexte() {
-    if (this.meteo.tempete > this.temps) return 'Une tempête secoue la mer.';
-    if (this.meteo.secheresse > this.temps) return 'Vague de chaleur, les champs souffrent.';
-    if (this.meteo.bonnePeche > this.temps) return 'Des bancs de sardines longent la côte.';
-    return 'Le temps est calme.';
+    const E = this.etatSaison;
+    const parts = [{
+      pluie: 'Il pleut.',
+      beau: 'Beau temps : le ciel est dégagé, l’air est doux et la terre est verte.',
+      chaleur: E.chaleur > 0.8 ? 'Il fait très chaud et la terre est sèche.' : 'Il fait chaud et la terre sèche.',
+      seche: 'C’est la saison sèche : la terre est craquelée et la chaleur pèse.',
+    }[E.nom]];
+    if (E.nom === 'chaleur' || E.nom === 'seche') parts.push(`La pluie est tombée pour la dernière fois ${depuis(this.temps - E.depuisPluie, this.temps)}.`);
+    if (this.meteo.tempete > this.temps) parts.push('Une tempête secoue la mer.');
+    else if (this.meteo.secheresse > this.temps) parts.push('Vague de chaleur, les champs souffrent.');
+    else if (this.meteo.bonnePeche > this.temps) parts.push('Des bancs de sardines longent la côte.');
+    return parts.join(' ');
   }
   occupants(f) {
     if (!this.cacheMembres) {
@@ -458,6 +470,7 @@ export class Simulation {
       this.horaire();
       if (Math.floor(this.temps / MIN_JOUR) !== Math.floor(avant / MIN_JOUR)) this.quotidien();
     }
+    this.etatSaison = saison(this.temps);
     regenerer(this.monde, dt);
     for (const v of this.habitants) this.majHabitant(v, dt);
   }
@@ -491,7 +504,9 @@ export class Simulation {
     const dort = a?.action === 'dormir' && !v.path?.length && v.statut === 'agit';
     const dehors = !v.interieur;
     b.faim = clamp(b.faim - (dort ? 0.03 : 0.06) * dt, 0, 100);
-    b.soif = clamp(b.soif - (dort ? 0.05 : 0.1) * dt, 0, 100);
+    // la chaleur de la saison assèche plus vite, surtout dehors et en plein jour
+    const chaud = 1 + 0.7 * this.etatSaison.chaleur * (lumiere(h) > 0 ? 1 : 0.3) * (dehors ? 1 : 0.35);
+    b.soif = clamp(b.soif - (dort ? 0.05 : 0.1) * chaud * dt, 0, 100);
     if (dort) {
       const confort = v.interieur && v.batiment === v.foyer ? confortFoyer(this.occupants(v.foyer), this.couchages(v.foyer)) : 0.5;
       b.energie = clamp(b.energie + recuperation(h, confort) * dt, 0, 100);
@@ -977,7 +992,8 @@ export class Simulation {
 
   travailler(v, a, dt) {
     const comp = v.competence[a.lieuCle] || 0;
-    const meteo = { tempete: this.meteo.tempete > this.temps, secheresse: this.meteo.secheresse > this.temps, bonnePeche: this.meteo.bonnePeche > this.temps };
+    const E = this.etatSaison;
+    const meteo = { tempete: this.meteo.tempete > this.temps, secheresse: this.meteo.secheresse > this.temps, bonnePeche: this.meteo.bonnePeche > this.temps, pluie: E.pluie, chaleurSaison: E.chaleur, seche: E.seche };
     const r = produire(a.lieuCle, this.monde, this.heure(), meteo, comp, dt, this.rendement(v));
     const b = v.besoins;
     b.energie = clamp(b.energie - (r.fatigue || 0) * 0.03 * dt, 0, 100);
@@ -1180,8 +1196,41 @@ export class Simulation {
   }
 
   // ---------- Rythmes ----------
+  tomberMalade(v) {
+    v.malade = true;
+    v.besoins.sante = Math.min(v.besoins.sante, 55);
+    noter(v, this.temps, 'Tu te sens malade : fièvre et faiblesse.');
+    this.log(`${nomComplet(v)} est tombé${v.genre === 'F' ? 'e' : ''} malade.`, 'mal', [v.id]);
+  }
+
+  // Les saisons : le jeu change la météo et ses effets physiques ; il ne dit rien à personne.
+  saisons() {
+    const E = this.etatSaison;
+    if (E.nom !== this.saisonNom) {
+      this.saisonNom = E.nom;
+      this.log({
+        pluie: 'La pluie tombe sur l’île.',
+        beau: 'La pluie a cessé : le beau temps revient.',
+        chaleur: 'La chaleur s’installe sur l’île.',
+        seche: 'La saison sèche commence : la terre se craquelle.',
+      }[E.nom], 'evenement');
+      this.emit('saison', E);
+    }
+    if (E.pluie) {
+      // les jarres des maisons se remplissent, la terre boit
+      for (const [id, f] of Object.entries(this.foyers)) {
+        const occ = Math.max(1, this.occupants(id));
+        f.eau = Math.min(occ * 10, f.eau + 0.9 * occ);
+      }
+      this.monde.fertilite = clamp(this.monde.fertilite + 0.04, 0.1, 1);
+      // sous la pluie, on attrape froid
+      for (const v of this.habitants) if (!v.malade && !v.nourrisson && !v.interieur && this.rng.chance(0.006)) this.tomberMalade(v);
+    }
+  }
+
   horaire() {
     const h = Math.round(this.heure()) % 24;
+    this.saisons();
     this.cycleDeVie();
     if (h === 6) this.meteoDuJour();
     if (this.navire && this.temps >= this.navire) { this.navire = 0; this.log('Le navire marchand a repris la mer.', 'evenement'); this.emit('navire', false); }
@@ -1199,12 +1248,7 @@ export class Simulation {
     if (this.historique.length > 80) this.historique.shift();
     for (const v of this.habitants) {
       v.impaye = 0;
-      if (!v.malade && rng.chance(risqueMaladie(v, this.bonus))) {
-        v.malade = true;
-        v.besoins.sante = Math.min(v.besoins.sante, 55);
-        noter(v, this.temps, 'Tu te sens malade : fièvre et faiblesse.');
-        this.log(`${nomComplet(v)} est tombé${v.genre === 'F' ? 'e' : ''} malade.`, 'mal', [v.id]);
-      }
+      if (!v.malade && rng.chance(risqueMaladie(v, this.bonus, this.etatSaison.chaleur))) this.tomberMalade(v);
     }
     this.dettes = this.dettes.filter((d) => d.montant > 0.5);
     this.emit('jour', this.jour);
@@ -1213,7 +1257,7 @@ export class Simulation {
   meteoDuJour() {
     const rng = this.rng;
     if (rng.chance(0.08)) { this.meteo.tempete = this.temps + rng.range(6, 14) * 60; this.log('Une tempête se lève sur la Méditerranée.', 'evenement'); this.emit('meteo', 'tempete'); }
-    else if (rng.chance(0.07)) { this.meteo.secheresse = this.temps + MIN_JOUR * 2; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
+    else if (['chaleur', 'seche'].includes(this.etatSaison.nom) && rng.chance(0.07)) { this.meteo.secheresse = this.temps + MIN_JOUR * 2; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
     else if (rng.chance(0.1)) { this.meteo.bonnePeche = this.temps + 12 * 60; this.log('Les bancs de sardines s’approchent des côtes.', 'evenement'); }
     if (!this.navire && rng.chance(0.18)) {
       this.navire = this.temps + 11 * 60;
@@ -1435,6 +1479,8 @@ export class Simulation {
     }
     sim.rng.state = d.rng;
     sim.derniereHeure = Math.floor(sim.temps / 60);
+    sim.etatSaison = saison(sim.temps);
+    sim.saisonNom = sim.etatSaison.nom;
     // numéros d'habitants : vivants et défunts rangés ensemble ; anciennes sauvegardes : dates de naissance déduites de l'âge
     sim.tous = [];
     for (const v of [...sim.habitants, ...(sim.defunts || [])]) {

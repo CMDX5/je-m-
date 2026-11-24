@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from '../vendor/three/OrbitControls.js';
 import { Simulation } from './sim/simulation.js';
 import { Environment } from './render/environment.js';
-import { creerTerrain, creerVegetation } from './render/terrain.js';
+import { creerTerrain, creerVegetation, saisonnier } from './render/terrain.js';
 import { Village } from './render/buildings.js';
 import { Habitants3D } from './render/villagers.js';
 import { Interface } from './ui/panel.js';
@@ -79,8 +79,9 @@ controls.maxDistance = 320;
 controls.screenSpacePanning = false;
 
 const env = new Environment(scene, renderer);
-creerTerrain(scene, sim.batiments);
+const terrain = creerTerrain(scene, sim.batiments);
 creerVegetation(scene, sim.nav);
+env.brancher(terrain, saisonnier);
 const village = new Village(scene, sim);
 const habitants3d = new Habitants3D(scene, sim);
 // Afficher les pensées au-dessus des têtes (regard du « dieu » qui observe) ; les paroles, elles, s'affichent toujours.
@@ -258,8 +259,9 @@ function boucle() {
   sim.vitesseAffichage = enPause ? 0 : vitesse;
   penseur.tick();
 
-  const meteo = sim.meteo.tempete > sim.temps ? 'tempete' : null;
-  env.update(sim.heure(), tAnim, meteo);
+  const E = sim.etatSaison;
+  const meteo = { tempete: sim.meteo.tempete > sim.temps, intensitePluie: E.intensitePluie, chaleur: E.chaleur, seche: E.seche, verdure: E.verdure };
+  env.update(sim.heure(), tAnim, meteo, camera);
   village.update(tAnim, env.nuit, sim);
   habitants3d.update(dt, tAnim, camera, selection);
   habitants3d.majTextes(camera, selection);

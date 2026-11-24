@@ -4,7 +4,7 @@
 
 import { libelleMetier, nomComplet } from './villager.js';
 import { METIERS, LIEUX, NOMS_OBJETS } from './data.js';
-import { depuis, moisDepuis } from './vie.js';
+import { depuis, moisDepuis, MOIS_MIN } from './vie.js';
 
 const mot = (x, bas, hauts) => {
   for (const [seuil, texte] of hauts) if (x >= seuil) return texte;
@@ -146,6 +146,8 @@ export function infosVillage(sim) {
   const libres = sim.maisonsLibres();
   if (libres.length) L.push(`- Maison(s) libre(s) : ${libres.map((b) => `${b.id} (${b.nom})`).join(', ')}.`);
   L.push('- Le temps : une année dure ici deux jours (un mois, quatre heures).');
+  const E = sim.etatSaison;
+  L.push(E.nom === 'pluie' ? `- Saison : c'est le mois de la pluie (la seule de l'année, elle dure ${Math.max(1, Math.ceil(E.resteDePluie / 60))} h de plus).` : `- Saison : mois ${E.mois} sur 12 ; la pluie revient dans ${Math.max(1, Math.ceil(E.jusquaPluie / MOIS_MIN))} mois.`);
   L.push(`- Les habitants : ${sim.roster()}`);
   return L.join('\n');
 }

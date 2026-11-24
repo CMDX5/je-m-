@@ -5,6 +5,7 @@
 import { METIERS, METIERS_ADULTES, PROJETS, NOMS_OBJETS } from '../sim/data.js';
 import { nomComplet, libelleMetier } from '../sim/villager.js';
 import { moisDepuis, depuis } from '../sim/vie.js';
+import { NOMS_SAISON } from '../sim/saison.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Une clé Google commence par « AIza » ; sinon, c'est une clé Groq.
@@ -97,6 +98,8 @@ export class Interface {
     const phase = h >= 5.5 && h < 7 ? 'aube' : h >= 7 && h < 18.5 ? 'jour' : h >= 18.5 && h < 20.5 ? 'crépuscule' : 'nuit';
     $('#horloge').textContent = `Jour ${s.jour} · ${hh}h${String(mm).padStart(2, '0')} · ${phase}`;
     const m = [];
+    const E = s.etatSaison;
+    m.push({ pluie: '🌧 Pluie', beau: '☀ Beau temps', chaleur: '🔥 Chaleur', seche: '🏜 Saison sèche' }[E.nom]);
     if (s.meteo.tempete > s.temps) m.push('Tempête');
     if (s.meteo.secheresse > s.temps) m.push('Vague de chaleur');
     if (s.navire) m.push('Navire au port');
@@ -202,6 +205,7 @@ export class Interface {
     let out = `<h3>Le village</h3>
       <div class="grille2">
         <div class="stat"><b>${s.habitants.length}</b><span>habitants · ${s.batiments.filter((b) => b.type === 'maison').length} maisons</span></div>
+        <div class="stat"><b>${NOMS_SAISON[s.etatSaison.nom]}</b><span>mois ${s.etatSaison.mois} sur 12 · ${s.etatSaison.pluie ? `la pluie dure encore ${Math.max(1, Math.ceil(s.etatSaison.resteDePluie / 60))} min (à ×1)` : `prochaine pluie dans ${Math.ceil(s.etatSaison.jusquaPluie / 60)} min (à ×1)`}</span></div>
         <div class="stat"><b>An ${s.annee}</b><span>une année = 2 jours · ${s.stats.naissances || 0} naissance${(s.stats.naissances || 0) > 1 ? 's' : ''}, ${s.stats.deces || 0} décès</span></div>
         <div class="stat"><b>${malades}</b><span>malade${malades > 1 ? 's' : ''}</span></div>
         <div class="stat"><b>${Math.round(fin)}</b><span>rations dans les maisons</span></div>

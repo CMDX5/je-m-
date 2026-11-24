@@ -11,6 +11,7 @@ Code : `src/sim/simulation.js`, `monde.js`, `data.js`, `navigation.js`.
 - **L'économie** : salaires versés par le conseil, prix du marché, stocks, dettes, vol avec témoins, production des lieux de travail.
 - **L'espace** : cartes, bâtiments, trajets, temps de marche.
 - **Les actions possibles** : dormir, manger, boire, travailler, aller, parler, donner, prendre, acheter, se soigner, prier, se reposer, flâner, étudier, jouer, puiser de l'eau, emménager, rien. Chaque action a des effets physiques. **Aucune n'est déclenchée par le jeu à la place de l'habitant.**
+- **Les saisons** (`src/sim/saison.js`) : une seule pluie par an (4 h de jeu = 4 minutes à ×1), qui commence à 8 h du premier jour de chaque année ; puis le beau temps (3 mois), la chaleur (4 mois) et la saison sèche (4 mois), jusqu'à la pluie suivante. Effets physiques : la pluie remplit les jarres des maisons et redonne de la fertilité à la terre, mais on y attrape plus facilement froid et on travaille moins bien ; la terre rend le plus après la pluie et le moins à la fin de la saison sèche ; la chaleur donne soif plus vite (dehors, en plein jour), fatigue davantage au travail en plein soleil et pèse sur la santé. **Les habitants perçoivent seulement des faits** (« Il pleut. », « Il fait très chaud… », « La pluie est tombée pour la dernière fois il y a 6 mois », « la pluie revient dans 4 mois ») : ce qu'ils en font (réserves d'eau, entraide, plaintes, prière) vient d'eux.
 - **Le conseil** (le joueur) : annonces, réponses aux demandes, prix, salaires, dons, amendes, métiers confiés, chantiers.
 - **Le calendrier et le cycle de vie** (`src/sim/vie.js`) : une année du village dure 2 jours (un mois : 4 h, une semaine : environ 55 min). Les corps vieillissent en continu.
   - **Mort** : un corps sans santé pendant 2 heures s'éteint ; sinon risque horaire selon l'âge (loi de Gompertz : 0,07 %/an à 20 ans, environ 3 %/an à 70 ans, 15 %/an à 90 ans), la maladie et la faiblesse. Une maladie guérit en général seule (4 %/heure). À la mort, le jeu ne fait que constater : l'argent passe à un proche, les provisions restent à la maison, les dettes s'éteignent, tout le village l'apprend comme un fait. **Le deuil, la prière, les souvenirs, ce qu'on en dit viennent des habitants.**
@@ -82,10 +83,11 @@ Le village :
 - Marché : 150 ration(s) à vendre, 1 pièce(s) la ration ; remède : 5 pièces. Eau gratuite à la source.
 - Le conseil paie 1 pièce(s) par heure travaillée.
 - Le temps : une année dure ici deux jours (un mois, quatre heures).
+- Saison : mois 12 sur 12 ; la pluie revient dans 1 mois.
 - Les habitants : Odeh (Youssef, Aïcha, Bassam, Mona) ; Qasem (Salim, Zeina, Sami, Jamal) ; Shahin (Adam, Dana, Suha) ; Zayed (Ibrahim, Samira, Mahmoud, Issa) ; Haddad (Tarek, Aya, Hani) ; Jaber (Lina, Ghada, Sara) ; Khoury (Nidal, Reem, Tala, Majd) ; Sabbagh (Ziad, Huda, Fadi) ; Farah (Omar, Siham, Layla, Widad) ; Awad (Rami, Rasha, Yazan, Elias) ; Saleh (Mounir, Jamila, Khalil) ; Mansour (Hassan, Amir, Dalia) ; Nasser (Nabil, Malak, Salma) ; Hamdan (Fares, Fatima, Walid, Haneen, Anas)
 
 === Habitant id=3 ===
-Jour 1, 6h00 (aube). Le temps est calme.
+Jour 1, 6h00 (aube). C’est la saison sèche : la terre est craquelée et la chaleur pèse. La pluie est tombée pour la dernière fois il y a 10 mois.
 Tu es Mona Odeh, 66 ans, une femme. Ta situation : ancienne, sans métier confié.
 Ce que tu écris de toi : (exemple) Description écrite par l’habitant.
 Ton foyer : Maison Odeh, 4 personne(s) pour 6 couchage(s). Ta famille : Youssef (49 ans), Aïcha (52 ans), Bassam (7 ans).
