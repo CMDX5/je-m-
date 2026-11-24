@@ -24,6 +24,9 @@ function attenteDepuis(r, texte) {
   return m ? Math.ceil(Number(m[1])) : 20;
 }
 
+export const DELAI_PENSEE_MS = 50000;
+export const DELAI_MODELES_MS = 15000;
+
 async function appeler(f, modele, prompt, avecReflexionCourte) {
   // les modèles qui « réfléchissent » avant de répondre consomment ces jetons dans le quota gratuit
   const reflexion = avecReflexionCourte && (/gpt-oss/.test(modele) || (f.id === 'gemini' && /gemini/.test(modele))) ? { reasoning_effort: 'low' } : {};
@@ -35,6 +38,7 @@ async function appeler(f, modele, prompt, avecReflexionCourte) {
       ...reflexion,
       messages: [{ role: 'user', content: prompt }],
     }),
+    signal: AbortSignal.timeout(DELAI_PENSEE_MS), // un fournisseur qui ne répond pas ne doit pas bloquer la fonction (300 s)
   });
 }
 
@@ -74,7 +78,7 @@ export async function appelerPensee(f, modele, prompt) {
 // Renvoie { status, corps } : ce que la page reçoit de api/modeles (sert aussi à vérifier la clé).
 export async function listerModeles(f) {
   try {
-    const r = await fetch(`${f.base}/models`, { headers: { Authorization: `Bearer ${f.cle}` } });
+    const r = await fetch(`${f.base}/models`, { headers: { Authorization: `Bearer ${f.cle}` }, signal: AbortSignal.timeout(DELAI_MODELES_MS) });
     if (r.status === 400 || r.status === 401 || r.status === 403) return { status: 401, corps: { erreur: `clé refusée par ${f.nom}` } };
     if (!r.ok) return { status: 502, corps: { erreur: `${f.nom} a répondu ${r.status}` } };
     const j = await r.json();

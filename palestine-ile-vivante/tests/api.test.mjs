@@ -45,3 +45,20 @@ assert.deepEqual(r.body, { modeles: ['gemini-2.5-flash'] }, 'le préfixe « mode
 reponse = () => R(400, 'API key not valid'); r = res(); await modeles({ headers: { 'x-fournisseur': 'gemini', 'x-cle': 'k' } }, r); assert.equal(r.code, 401);
 reponse = () => { throw new Error('réseau'); }; r = res(); await modeles({ headers: { 'x-fournisseur': 'groq', 'x-cle': 'k' } }, r); assert.equal(r.code, 502);
 console.log('Points d\'accès : appels Groq et Gemini, quotas, surcharges, modèles refusés. OK');
+
+// un fournisseur qui ne répond jamais : la fonction rend la main au lieu de rester bloquée jusqu'à 300 s
+{
+  const vrai = globalThis.fetch;
+  let signal = null;
+  globalThis.fetch = async (url, o = {}) => { signal = o.signal; return new Promise((_, rej) => o.signal?.addEventListener('abort', () => rej(new Error('délai')))); };
+  const { appelerPensee, listerModeles, DELAI_PENSEE_MS, DELAI_MODELES_MS } = await import('../api/_fournisseurs.js');
+  assert.ok(DELAI_PENSEE_MS <= 60000 && DELAI_MODELES_MS <= 30000, 'délais courts');
+  const f = { id: 'groq', nom: 'Groq', base: 'https://x', cle: 'k' };
+  const t = appelerPensee(f, 'm', 'p'); await new Promise((r) => setTimeout(r, 5)); assert.ok(signal, 'un délai est posé sur l\'appel');
+  signal.dispatchEvent(new Event('abort')); const rep = await t;
+  assert.equal(rep.status, 502, 'refus propre, la page réessaiera');
+  const t2 = listerModeles(f); await new Promise((r) => setTimeout(r, 5)); signal.dispatchEvent(new Event('abort'));
+  assert.equal((await t2).status, 502);
+  globalThis.fetch = vrai;
+  console.log('Fournisseur muet : délai posé, réponse 502 au lieu de rester bloqué. OK');
+}
