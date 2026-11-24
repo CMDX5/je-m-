@@ -2,7 +2,7 @@
 // Tout passe par le code du village (choisi par le joueur) ; les clés ne sont jamais renvoyées.
 // Corps de requête : l'état du village compressé (gzip), facultatif. Réglages dans l'en-tête x-reglages (JSON).
 import { gunzipSync } from 'node:zlib';
-import { modifier, vueDoc, docVide, codeValide, creerAcces, demarrerChaine, abandonnerChaine, dependances, DUREE_BAIL_MS, CODE_MIN } from './_village.js';
+import { modifier, vueDoc, docVide, codeValide, creerAcces, nouveauPartage, demarrerChaine, abandonnerChaine, dependances, DUREE_BAIL_MS, CODE_MIN } from './_village.js';
 
 const attendre = (ms) => new Promise((r) => setTimeout(r, ms));
 const MAX_ETAT = 6 * 1024 * 1024;
@@ -67,6 +67,7 @@ export default async function handler(req, res) {
       // reglages : désactiver la veille, effacer les clés, changer de code
       const nouveau = { ...base };
       if (typeof reglages.veille === 'boolean') { nouveau.veille = reglages.veille; nouveau.veilleJusqua = reglages.veille ? maintenant + 10 * 3600 * 1000 : 0; }
+      if (typeof reglages.partage === 'boolean') nouveau.partage = reglages.partage ? (base.partage || nouveauPartage()) : '';
       if (reglages.effacerCles) nouveau.cles = { groq: '', gemini: '' };
       if (reglages.cles) nouveau.cles = { groq: String(reglages.cles.groq || nouveau.cles.groq || ''), gemini: String(reglages.cles.gemini || nouveau.cles.gemini || '') };
       if (reglages.nouveauCode && String(reglages.nouveauCode).length >= CODE_MIN) Object.assign(nouveau, creerAcces(String(reglages.nouveauCode)));

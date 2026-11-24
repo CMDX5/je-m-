@@ -14,6 +14,11 @@ export const POINT_MS = 25 * 60 * 1000; // le village est sauvegardé au moins t
 export const DUREE_MAILLON_S = Number(process.env.VEILLE_DUREE_S) || 300; // durée maximale d'un passage (api/veille.js)
 export const BUDGET_MAILLON_MS = (DUREE_MAILLON_S - 70) * 1000; // on garde 70 s pour enregistrer et passer le relais
 export const CODE_MIN = 8;
+export const nouveauPartage = () => randomBytes(12).toString('hex'); // lien de lecture seule : ne permet que de regarder
+export function partageValide(doc, jeton) {
+  if (!doc?.partage || typeof jeton !== 'string' || jeton.length !== doc.partage.length) return false;
+  return timingSafeEqual(Buffer.from(jeton), Buffer.from(doc.partage));
+}
 const CHEMIN = 'village/etat.json.gz';
 
 // ---------- stockage ----------
@@ -52,7 +57,7 @@ export function codeValide(doc, code) {
 
 export const docVide = (code, maintenant) => ({
   v: 1, ...creerAcces(code), idPartie: null, temps: 0, majA: maintenant, bail: null, veille: false, veilleJusqua: 0,
-  cles: { groq: '', gemini: '' }, relais: null, etat: null,
+  cles: { groq: '', gemini: '' }, relais: null, etat: null, partage: '',
 });
 
 // Lecture puis écriture protégées : si quelqu'un a écrit entre-temps, on relit et on recommence (3 fois au plus).
@@ -74,7 +79,7 @@ export async function modifier(fn, { maintenant = Date.now() } = {}) {
 const chaineVivante = (doc, maintenant) => !!(doc?.relais?.chaine && doc.relais.chaine.vivantJusqua > maintenant);
 export const vueDoc = (doc) => ({
   existe: !!doc?.etat, temps: doc?.temps ?? 0, idPartie: doc?.idPartie ?? null, majA: doc?.majA ?? 0,
-  veille: !!doc?.veille, veilleJusqua: doc?.veilleJusqua ?? 0, relais: doc?.relais ? { ...doc.relais, chaine: undefined, enCours: chaineVivante(doc, Date.now()) } : null,
+  partage: doc?.partage || '', veille: !!doc?.veille, veilleJusqua: doc?.veilleJusqua ?? 0, relais: doc?.relais ? { ...doc.relais, chaine: undefined, enCours: chaineVivante(doc, Date.now()) } : null,
   cles: { groq: !!doc?.cles?.groq, gemini: !!doc?.cles?.gemini },
   bail: doc?.bail && doc.bail.jusqua > Date.now() ? { jusqua: doc.bail.jusqua } : null,
 });

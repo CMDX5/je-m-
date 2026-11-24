@@ -122,7 +122,8 @@ export class Interface {
     const b = $('#bandeau');
     const p = this.penseur;
     let html = '', cls = '';
-    if (p?.mode === 'claude') {
+    if (this.spectateur) html = `👁 Vous regardez un village en lecture seule : ${esc(this.spectateur)}`;
+    else if (p?.mode === 'claude') {
       const n = s.demandes().length;
       if (!p.pret) html = 'Connexion à Claude…';
       else if (!p.disponible) { cls = 'alerte'; html = `<b>Les habitants ne peuvent pas penser.</b> ${esc(p.derniereErreur)}`; }
@@ -279,7 +280,7 @@ export class Interface {
   // ---------- Relais de nuit ----------
   carteRelais() {
     const r = this.relais;
-    if (!r || !this.penseur || this.penseur.mode !== 'groq') return '';
+    if (this.spectateur || !r || !this.penseur || this.penseur.mode !== 'groq') return '';
     let out = '<h3>Relais de nuit</h3>';
     if (!r.actif) {
       return out + `<p class="note">Pour que le village continue de vivre pendant que vous dormez ou que vous fermez la page, un serveur gratuit prend le relais avec <b>vos</b> clés Groq / Gemini. Elles sont gardées dans le stockage privé de votre projet Vercel, uniquement pour faire penser les habitants, et vous pouvez les effacer à tout moment. Le village avance tant que les modèles gratuits répondent ; il s'arrête quand leurs quotas du jour sont épuisés.</p>
@@ -303,6 +304,14 @@ export class Interface {
     if (s?.relais?.enCours) out += '<p class="note"><span class="pos">Le relais travaille en ce moment.</span> Reprendre la main maintenant ferait perdre ses dernières minutes.</p>';
     out += `<div class="boutons"><button class="btn principal" data-action="relais-partir" ${r.veille ? '' : 'disabled'}>Laisser vivre sans moi</button>
       <button class="btn danger" data-action="relais-eteindre">Éteindre et effacer mes clés</button></div>`;
+    out += '<h3>Montrer le village</h3>';
+    if (s?.partage) {
+      const lien = `${location.origin}${location.pathname}?regarder=${s.partage}`;
+      out += `<p class="note">Toute personne qui a ce lien peut <b>regarder</b> votre village, sans clé et sans rien pouvoir changer. L'image est rafraîchie toutes les 10 minutes tant que cette page est ouverte, et à chaque passage du relais.</p>
+        <input class="lien-partage" readonly value="${esc(lien)}" aria-label="Lien de lecture seule" onfocus="this.select()">
+        <div class="boutons"><button class="btn principal" data-action="partage-copier">Copier le lien</button><button class="btn danger" data-action="partage-couper">Couper le lien</button></div>`;
+    } else out += `<p class="note">Vos amis n'ont pas à saisir de clé pour voir le village : créez un lien de lecture seule. Ils verront votre village, sans pouvoir le modifier ni utiliser vos clés. Vous pouvez couper le lien quand vous voulez.</p>
+      <div class="boutons"><button class="btn principal" data-action="partage-activer">Créer un lien à partager</button></div>`;
     return out;
   }
 
@@ -437,6 +446,7 @@ export class Interface {
   clicContenu(e) {
     const t = e.target.closest('[data-hab],[data-action],[data-commerce],[data-sujet],[data-ignorer],[data-paroles]');
     if (!t) return;
+    if (this.spectateur && t.dataset.action && t.dataset.action !== 'voir-chantier') return; // lecture seule
     const s = this.sim;
     if (t.dataset.paroles) { this.filtreParoles = t.dataset.paroles; return this.rendreContenu(true); }
     if (t.dataset.hab !== undefined) return this.actions.selectionner(Number(t.dataset.hab), true);
@@ -457,6 +467,9 @@ export class Interface {
     else if (t.dataset.action === 'recommencer') this.actions.recommencer();
     else if (t.dataset.action === 'relais-partir') this.actions.relais.partir().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this.rendreContenu(true); });
     else if (t.dataset.action === 'relais-eteindre') this.actions.relais.eteindre().then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
+    else if (t.dataset.action === 'partage-activer') this.actions.relais.partage(true).then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
+    else if (t.dataset.action === 'partage-couper') this.actions.relais.partage(false).then((r) => { this.toast(r.message, r.ok ? 'bien' : 'mal'); this._relaisRafraichi = 0; this.rendreContenu(true); });
+    else if (t.dataset.action === 'partage-copier') this.actions.relais.copierLien().then((r) => this.toast(r.message, r.ok ? 'bien' : 'mal'));
     else if (t.dataset.action === 'oublier-cle') this.penseur?.oublierCle?.(t.dataset.fournisseur);
     this.rendreContenu(true);
     this.rendreFiche(true);
@@ -466,6 +479,7 @@ export class Interface {
     const f = e.target.closest('form[data-form]');
     if (!f) return;
     e.preventDefault();
+    if (this.spectateur) return; // lecture seule
     const d = new FormData(f);
     const s = this.sim;
     if (f.dataset.form === 'economie') {

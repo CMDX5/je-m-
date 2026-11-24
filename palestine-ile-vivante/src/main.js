@@ -34,11 +34,29 @@ await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
 
 // ---------- Relais de nuit : le village a-t-il vécu pendant que la page était fermée ? ----------
 const relais = new Relais();
+// Mode « regarder » : le village d'un ami, en lecture seule (lien ?regarder=…). Rien n'est écrit chez le visiteur,
+// aucune clé n'est demandée, les habitants ne pensent pas ici : on voit la dernière photo du village, rafraîchie.
+const jetonRegard = new URLSearchParams(location.search).get('regarder');
+const spectateur = !!jetonRegard;
+let etatRegard = null, majRegard = 0;
+if (spectateur) {
+  relais.code = ''; // ce visiteur n'a aucun village sur le serveur : le relais reste inactif
+  try {
+    const r = await fetch(`api/regarder?t=${encodeURIComponent(jetonRegard)}`);
+    if (!r.ok) throw new Error(String(r.status));
+    majRegard = Number(r.headers.get('x-maj')) || 0;
+    etatRegard = await r.text();
+    document.body.classList.add('spectateur');
+  } catch {
+    document.getElementById('chargement').textContent = 'Ce lien ne montre aucun village (il a peut-être été coupé).';
+    throw new Error('lien de lecture invalide');
+  }
+}
 let enRechargement = false; // pendant un rechargement voulu, on n'écrase pas la sauvegarde qu'on vient de poser
 let absence = null; // { de, deces, naissances, decisions } : l'état de la page avant que le village n'avance sans elle
 try { absence = JSON.parse(sessionStorage.getItem('ile-vivante:absence') || 'null'); sessionStorage.removeItem('ile-vivante:absence'); } catch { absence = null; }
 const veutNouvellePartie = new URLSearchParams(location.search).has('graine') || !!lireStockage(CLE_A_CHARGER);
-if (relais.actif && !veutNouvellePartie) {
+if (relais.actif && !veutNouvellePartie && !spectateur) {
   const dist = await relais.prendre();
   if (!dist.bloque && dist.existe && dist.etat) {
     let tempsLocal = -1, stats0 = null;
@@ -55,8 +73,9 @@ if (relais.actif && !veutNouvellePartie) {
 
 // ---------- Simulation ----------
 let sim;
-const aCharger = lireStockage(CLE_A_CHARGER);
-if (aCharger) {
+const aCharger = spectateur ? null : lireStockage(CLE_A_CHARGER);
+if (spectateur) sim = Simulation.charger(etatRegard);
+else if (aCharger) {
   ecrireStockage(CLE_A_CHARGER, null);
   try { sim = Simulation.charger(lireStockage(CLE_SAUVEGARDE)); } catch (e) { console.warn('Sauvegarde illisible', e); }
 }
@@ -71,9 +90,9 @@ if (params.has('graine')) {
   // l'adresse redevient normale : un rechargement reprendra cette nouvelle partie
   try { const u = new URL(location.href); u.searchParams.delete('graine'); history.replaceState(null, '', u); } catch { /* adresse figée */ }
 }
-if (veutNouvellePartie) relais.nouvellePartie(); // une autre partie : elle remplacera celle du serveur
+if (veutNouvellePartie && !spectateur) relais.nouvellePartie(); // une autre partie : elle remplacera celle du serveur
 function sauverAuto() {
-  if (enRechargement || !sim.habitants.some((v) => v.nbDecisions > 0)) return;
+  if (spectateur || enRechargement || !sim.habitants.some((v) => v.nbDecisions > 0)) return;
   ecrireStockage(CLE_AUTO, sim.serialiser());
 }
 setInterval(sauverAuto, 60000);
@@ -165,6 +184,7 @@ sim.on('construction', ({ cle, batiment }) => {
 let vitesse = 0; // pause tant que l'intro est affichée
 let vitesseAvantPause = 4;
 function changerVitesse(v) {
+  if (spectateur) return;
   if (v === 0 && vitesse !== 0) vitesseAvantPause = vitesse;
   vitesse = v;
 }
@@ -222,16 +242,17 @@ const ui = new Interface(sim, {
 // Sur claude.ai (téléphone compris), les habitants pensent avec Claude, sur le compte du joueur ;
 // ailleurs, avec le serveur local (Ollama…).
 // En ligne (Vercel), avec le modèle gratuit de Groq, en continu.
-const surClaude = typeof window.claude?.use === 'function';
-const configServeur = surClaude ? null : await fetch('api/config').then((r) => r.json()).catch(() => null);
-const surGroq = configServeur?.mode === 'groq';
+const surClaude = !spectateur && typeof window.claude?.use === 'function';
+const configServeur = surClaude || spectateur ? null : await fetch('api/config').then((r) => r.json()).catch(() => null);
+const surGroq = spectateur || configServeur?.mode === 'groq';
 const SEUIL_ATTENTE = surClaude ? 5 : surGroq ? 10 : 12;
-const penseur = surClaude ? new PenseurClaude(sim) : surGroq ? new PenseurGroq(sim) : new Penseur(sim);
+const penseur = surClaude ? new PenseurClaude(sim) : surGroq ? new PenseurGroq(sim, spectateur ? { cles: {} } : {}) : new Penseur(sim);
 ui.penseur = penseur;
-penseur.verifier();
+if (spectateur) ui.spectateur = `photo du village prise ${new Date(majRegard).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}, rafraîchie toute seule.`;
+else penseur.verifier();
 
 // En ligne (Vercel) : rapport régulier pour que Claude surveille la partie
-if (surGroq) demarrerRapports(sim, penseur);
+if (surGroq && !spectateur) demarrerRapports(sim, penseur);
 
 // ---------- Relais de nuit : départ, retour, reprise de main ----------
 const clesDuJoueur = () => (penseur.cles ? { groq: penseur.cles.groq || '', gemini: penseur.cles.gemini || '' } : null);
@@ -278,11 +299,15 @@ document.addEventListener('visibilitychange', () => {
     reprendreLaMain();
   }
 });
-// la page ouverte garde la main et sauvegarde le village sur le serveur toutes les 30 minutes (au cas où le téléphone la ferme)
+// la page ouverte garde la main et sauvegarde le village sur le serveur toutes les 30 minutes (au cas où le téléphone la ferme),
+// toutes les 10 minutes quand un lien de lecture seule est partagé (pour que les spectateurs voient un village récent)
+let tourDepot = 0;
 setInterval(() => {
+  tourDepot++;
   if (!relais.actif || relais.bloque || auRelais || document.visibilityState !== 'visible' || !sim.habitants.some((v) => v.nbDecisions > 0)) return;
+  if (!relais.statut?.partage && tourDepot % 3) return;
   relais.deposer(sim, { liberer: false, cles: clesDuJoueur(), heures: heuresVeille });
-}, 30 * 60 * 1000);
+}, 10 * 60 * 1000);
 
 Object.assign(ui.actions, {
   relais: {
@@ -316,6 +341,20 @@ Object.assign(ui.actions, {
       const r = await relais.reglages({ veille: false, effacerCles: true });
       relais.definirVeille(false);
       return r.status === 200 ? { ok: true, message: 'Relais éteint, vos clés sont effacées du serveur.' } : { ok: false, message: 'Le serveur ne répond pas : vos clés y restent jusqu’au prochain essai.' };
+    },
+    // lien de lecture seule : les amis regardent le village sans clé (api/regarder)
+    async partage(oui) {
+      if (!relais.actif) return { ok: false, message: 'Activez d’abord le relais : le village doit être enregistré sur le serveur.' };
+      const r = await relais.reglages({ partage: oui });
+      if (r.status !== 200) return { ok: false, message: 'Le serveur ne répond pas. Réessayez.' };
+      if (oui) await relais.deposer(sim, { liberer: false, cles: clesDuJoueur(), heures: heuresVeille });
+      return { ok: true, message: oui ? 'Lien créé. Copiez-le et envoyez-le.' : 'Lien coupé : plus personne ne peut regarder.' };
+    },
+    async copierLien() {
+      const j = relais.statut?.partage;
+      if (!j) return { ok: false, message: 'Aucun lien à copier.' };
+      const lien = `${location.origin}${location.pathname}?regarder=${j}`;
+      try { await navigator.clipboard.writeText(lien); return { ok: true, message: 'Lien copié.' }; } catch { return { ok: false, message: 'Copie impossible : touchez le lien et copiez-le à la main.' }; }
     },
     reprendre: reprendreLaMain,
   },
@@ -380,6 +419,15 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// ---------- Regarder : la photo du village se rafraîchit quand son propriétaire en dépose une plus récente ----------
+async function rafraichirRegard() {
+  try {
+    const r = await fetch(`api/regarder?t=${encodeURIComponent(jetonRegard)}`);
+    if (r.status === 404) { ui.toast('Le lien a été coupé : ce village n’est plus partagé.', 'mal'); return; }
+    if (r.ok && Number(r.headers.get('x-maj')) > majRegard) location.reload();
+  } catch { /* hors ligne : on réessaie au prochain tour */ }
+}
+
 // ---------- Intro ----------
 const intro = document.getElementById('intro');
 document.getElementById('commencer').addEventListener('click', () => {
@@ -387,7 +435,8 @@ document.getElementById('commencer').addEventListener('click', () => {
   changerVitesse(4);
 });
 if (reprise) ui.toast(`Partie reprise : ${sim.horodatage()}.`, 'bien');
-if (aCharger || reprise || params.has('direct')) { intro.remove(); changerVitesse(params.has('capture') ? 0 : 4); }
+if (spectateur) { intro.remove(); setInterval(rafraichirRegard, 3 * 60 * 1000); }
+else if (aCharger || reprise || params.has('direct')) { intro.remove(); changerVitesse(params.has('capture') ? 0 : 4); }
 document.getElementById('chargement').classList.add('fini');
 
 // ---------- Boucle ----------
@@ -403,7 +452,7 @@ function boucle() {
   const enPause = vitesse > 0 && sim.nbAttente() > SEUIL_ATTENTE;
   if (vitesse > 0 && !enPause) sim.update(dt * vitesse);
   sim.vitesseAffichage = enPause ? 0 : vitesse;
-  penseur.tick();
+  if (!spectateur) penseur.tick();
 
   const E = sim.etatSaison;
   const meteo = { tempete: sim.meteo.tempete > sim.temps, intensitePluie: E.intensitePluie, chaleur: E.chaleur, seche: E.seche, verdure: E.verdure };
