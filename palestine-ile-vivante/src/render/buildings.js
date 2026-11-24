@@ -203,6 +203,17 @@ export function creerPuits(b) {
   return placer(g, b);
 }
 
+// Fontaine du marché : une vasque de pierre, un jet d'eau au centre.
+export function creerFontaine(b) {
+  const g = new THREE.Group();
+  g.add(cyl(1.6, 1.7, 0.8, 16, pierre[3], 0, 0.4, 0));
+  g.add(cyl(1.3, 1.3, 0.1, 16, eauMat, 0, 0.78, 0));
+  g.add(cyl(0.3, 0.4, 1.4, 10, pierre[2], 0, 1.3, 0));
+  g.add(cyl(0.7, 0.3, 0.12, 12, pierre[3], 0, 2.0, 0));
+  g.add(cyl(0.5, 0.5, 0.06, 12, eauMat, 0, 2.08, 0));
+  return placer(g, b);
+}
+
 // Halle ombragée : une toile tendue sur des poteaux, ouverte sur les côtés, avec des bancs dessous.
 export function creerHalle(b) {
   const g = new THREE.Group();
@@ -359,7 +370,7 @@ export class Chantier {
       const { x, z } = projet.site;
       const y = heightAt(x, z);
       g.position.set(x, y, z);
-      const w = projet.cle === 'puits' ? 3 : projet.cle === 'halle' ? 8 : 7;
+      const w = projet.cle === 'puits' || projet.cle === 'fontaine' ? 3 : projet.cle === 'halle' ? 8 : 7;
       this.vol = box(w, 1, w * 0.85, pierre[0], 0, 0, 0);
       g.add(this.vol);
       const ech = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 1, 4, w * 0.85 + 1, 2, 2, 2)), new THREE.LineBasicMaterial({ color: 0x6b4a2e }));
@@ -369,7 +380,7 @@ export class Chantier {
       g.add(box(3, 0.2, 0.3, bois, -w / 2 - 1.6, 0.2, 0), box(3, 0.2, 0.3, bois, -w / 2 - 1.6, 0.4, 0.4));
       this.scene.add(g);
       this.g = g;
-      this.hauteur = projet.cle === 'puits' ? 1.2 : projet.cle === 'halle' ? 3.2 : 3.4;
+      this.hauteur = projet.cle === 'puits' || projet.cle === 'fontaine' ? 1.2 : projet.cle === 'halle' ? 3.2 : 3.4;
     }
     const t = projet.enAttente ? 0.02 : Math.min(1, projet.progres / projet.travail);
     const h = Math.max(0.1, t * this.hauteur);
@@ -407,6 +418,7 @@ export class Village {
       case 'entrepot': g = creerEntrepot(b); break;
       case 'puits': g = creerPuits(b); break;
       case 'halle': g = creerHalle(b); break;
+      case 'fontaine': g = creerFontaine(b); break;
       default: return;
     }
     this.scene.add(g);

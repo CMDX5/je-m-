@@ -94,7 +94,7 @@ export class Simulation {
     this.dettes = [];
     this.monde = creerMonde();
     this.foyers = {};
-    this.bonus = { jetee: false, puits: false, ecole: false, halle: false };
+    this.bonus = { jetee: false, puits: false, ecole: false, halle: false, fontaine: false };
     this.projet = null;
     this.meteo = { tempete: 0, secheresse: 0, bonnePeche: 0 };
     this.etatSaison = saison(this.temps); // pluie, beau temps, chaleur, saison sèche : fonction du temps
@@ -583,6 +583,10 @@ export class Simulation {
       const b = this.batiment(L.bat);
       return { x: b.door.x, z: b.door.z, interieur: !!L.interieur, bat: b.id, nomLieu: L.nom, id: res.cle };
     }
+    if (res.cle === 'source') {
+      const f = this.versFontaine(v);
+      if (f) return { x: f.x + this.rng.range(-1.5, 1.5), z: f.z + 2.4 + this.rng.range(0, 1), zone: 'source', nomLieu: 'la fontaine du marché', id: 'source' };
+    }
     const z = ZONES[L.zone];
     return { ...randomPointInZone(z, this.rng), zone: L.zone, nomLieu: L.nom, id: res.cle };
   }
@@ -971,7 +975,7 @@ export class Simulation {
 
   boire(v, a) {
     const f = this.foyers[v.foyer];
-    const prSource = Math.hypot(v.x - ZONES.source.x, v.z - ZONES.source.z) < ZONES.source.r + 3;
+    const prSource = Math.hypot(v.x - ZONES.source.x, v.z - ZONES.source.z) < ZONES.source.r + 3 || this.prosDeLaFontaine(v);
     if (v.poche.eau >= 1) v.poche.eau -= 1;
     else if (prSource) { /* l'eau de la source est gratuite */ }
     else if (v.interieur && v.batiment === v.foyer && f.eau >= 1) f.eau -= 1;
@@ -1285,6 +1289,18 @@ export class Simulation {
     this.pertesJour = (this.pertesJour || 0) + perte;
   }
 
+  // La fontaine du marché, quand elle existe, est un point d'eau gratuit comme la source ; on va au plus proche.
+  versFontaine(v) {
+    const f = this.bonus.fontaine && this.batimentsParId.fontaine;
+    if (!f) return null;
+    return Math.hypot(v.x - f.x, v.z - f.z) < Math.hypot(v.x - ZONES.source.x, v.z - ZONES.source.z) ? f : null;
+  }
+
+  prosDeLaFontaine(v) {
+    const f = this.bonus.fontaine && this.batimentsParId.fontaine;
+    return !!f && Math.hypot(v.x - f.x, v.z - f.z) < 4.5;
+  }
+
   // À l'ombre de la halle du marché, la chaleur pèse comme à l'intérieur d'une maison.
   sousLaHalle(v) {
     if (!this.bonus.halle) return false;
@@ -1352,6 +1368,7 @@ export class Simulation {
 
   siteProjet(cle) {
     if (cle === 'puits') return { x: 13, z: 24 };
+    if (cle === 'fontaine') return { x: PLAZA.x - 7, z: PLAZA.z + 5.5 }; // sur la place, à côté de la halle
     if (cle === 'halle') return { x: PLAZA.x, z: PLAZA.z + 5.5 }; // sur la place du marché, entre les étals
     if (cle === 'jetee') return { x: 2, z: 61 };
     if (cle === 'ecole') return { ...this.batiment('ecole').door };
@@ -1391,6 +1408,7 @@ export class Simulation {
       this.foyers[bat.id] = { nourriture: 0, eau: 0, pertes: [] };
     } else if (p.cle === 'puits') bat = makeBuilding('puits', 'puits', 'Puits communal', p.site.x, p.site.z, 3, 3, 0);
     else if (p.cle === 'halle') bat = makeBuilding('halle', 'halle', 'Halle ombragée', p.site.x, p.site.z, 9, 4, 0);
+    else if (p.cle === 'fontaine') bat = makeBuilding('fontaine', 'fontaine', 'Fontaine du marché', p.site.x, p.site.z, 3, 3, 0);
     this.bonus[p.cle] = true;
     if (bat) { bat.ajoute = true; this.batiments.push(bat); this.batimentsParId[bat.id] = bat; this.nav.blockBuilding(bat); }
     this.annoncerEvenement(`Le chantier « ${p.nom} » est terminé : ${PROJETS[p.cle].effet}.`);

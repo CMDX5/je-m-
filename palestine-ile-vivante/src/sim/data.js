@@ -63,6 +63,7 @@ export const PROJETS = {
   maison: { nom: 'Nouvelle maison', cout: { pierre: 60, bois: 30 }, travail: 110, effet: 'Une maison libre où s’installer' },
   jetee: { nom: 'Jetée agrandie', cout: { pierre: 35, bois: 35 }, travail: 80, effet: 'Deux places de pêche en plus' },
   halle: { nom: 'Halle ombragée du marché', cout: { bois: 30, pierre: 15 }, travail: 70, effet: 'Un abri frais au marché : on y a moins soif par forte chaleur' },
+  fontaine: { nom: 'Fontaine du marché', cout: { pierre: 30, bois: 10 }, travail: 60, effet: 'De l’eau fraîche et gratuite sur la place du marché, bien plus près des maisons que la source' },
   ecole: { nom: "Agrandissement de l'école", cout: { pierre: 50, bois: 25 }, travail: 90, effet: 'Plus de place pour apprendre' },
 };
 
