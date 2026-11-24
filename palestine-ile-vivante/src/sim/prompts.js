@@ -6,7 +6,7 @@
 // Il ne connaît que la langue : ses réactions, ses opinions, ses choix sont les siens.
 
 export const ACTIONS = [
-  'dormir', 'manger', 'boire', 'travailler', 'aller', 'parler', 'donner', 'prendre', 'acheter',
+  'dormir', 'manger', 'boire', 'travailler', 'aller', 'parler', 'donner', 'demander', 'prendre', 'acheter',
   'se_soigner', 'prier', 'se_reposer', 'flaner', 'etudier', 'jouer', 'puiser_eau', 'emmenager', 'avoir_un_enfant', 'rien',
 ];
 
@@ -29,6 +29,7 @@ Ce que ton corps peut faire dans ce monde, une chose à la fois :
 - aller : aller à un lieu (champs, oliveraie, carriere, pinede, marche, port, jetee, plage, source, belvedere, mosquee, ecole, dispensaire, atelier, chantier, maison, ou le prénom d'une personne pour aller chez elle).
 - parler : aller vers une personne et lui parler (champ "personne" ; ce que tu dis va dans "parole").
 - donner : donner ou prêter un objet à une personne (champs "personne", "objet", "quantite" ; "pret": true si tu le prêtes).
+- demander : aller vers une personne (champ "personne") pour lui demander quelque chose (champs "objet", "quantite") ; ce que tu lui dis va dans "parole". Elle décide de ce qu'elle en fait.
 - prendre : prendre sans payer ni demander un objet chez une personne (champ "personne") ou au marché (laisser "personne" vide).
 - acheter : acheter des rations ou des remèdes au marché (champs "objet", "quantite").
 - se_soigner : aller te faire soigner au dispensaire.
@@ -49,6 +50,7 @@ Réponds uniquement par un objet JSON :
 - "lieu", "personne", "objet" (nourriture, eau, pieces, remedes, huile, rien), "quantite", "pret", "duree_minutes" : seulement si l'action en a besoin.
 - "parole" : ce que tu dis à voix haute aux personnes autour de toi (chaîne vide si tu te tais).
 - "ton" : le ton de ta parole, en un mot à toi.
+- "dispute" : true si ce que tu dis à cette personne est une dispute, un affrontement (facultatif).
 - "souvenir" : ce que tu veux retenir de ce moment, avec tes mots (facultatif).
 - "avis_sur" et "avis" : si tu te fais une opinion sur quelqu'un, son prénom et ton avis (facultatif).
 - "lien" : avec "avis_sur", ce que cette personne est pour toi, avec tes mots (facultatif).
@@ -81,6 +83,7 @@ export const SCHEMA_DECISION = {
     duree_minutes: { type: 'integer' },
     parole: { type: 'string' },
     ton: { type: 'string' },
+    dispute: { type: 'boolean' },
     souvenir: { type: 'string' },
     avis_sur: { type: 'string' },
     avis: { type: 'string' },

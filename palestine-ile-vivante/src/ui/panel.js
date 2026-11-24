@@ -376,6 +376,7 @@ export class Interface {
         parole: `${qui} dit${sur ? ` à ${sur}` : ''} : « ${esc(e.texte)} »${ton}`,
         souvenir: `${qui} retient : « ${esc(e.texte)} »`,
         avis: `${qui}, à propos de ${sur} : « ${esc(e.texte)} »${avant}`,
+        demande: `${qui} demande à ${sur} : ${esc(e.texte)}`,
         lien: `${qui} : pour lui, ${sur} est « ${esc(e.texte)} »${avant}`,
         conseil: `${qui} sur le conseil : « ${esc(e.texte)} »${avant}`,
         identite: `${qui} se décrit : « ${esc(e.texte)} »${avant}`,

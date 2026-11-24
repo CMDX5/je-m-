@@ -27,18 +27,19 @@ const CAPACITE_MARCHE = 600; // rations que l'entrepôt du marché peut garder
 const VITESSE_MARCHE = 1.45;
 const RENDU = {
   dormir: 'dormir', manger: 'manger', boire: 'manger', travailler: 'travailler', aller: 'flaner', parler: 'socialiser',
-  donner: 'aider', prendre: 'socialiser', acheter: 'socialiser', se_soigner: 'soigner', prier: 'prier', se_reposer: 'rester',
+  donner: 'aider', demander: 'socialiser', prendre: 'socialiser', acheter: 'socialiser', se_soigner: 'soigner', prier: 'prier', se_reposer: 'rester',
   flaner: 'flaner', etudier: 'ecole', jouer: 'jouer', puiser_eau: 'travailler', emmenager: 'rester', rien: 'rester', avoir_un_enfant: 'socialiser',
 };
 const ETAT = {
   dormir: 'Dort', manger: 'Mange', boire: 'Boit', travailler: 'Travaille', aller: 'Se rend quelque part', parler: 'Parle à quelqu’un',
-  donner: 'Donne quelque chose', prendre: 'Prend quelque chose', acheter: 'Achète au marché', se_soigner: 'Se fait soigner', prier: 'Prie',
+  donner: 'Donne quelque chose', demander: 'Demande quelque chose', prendre: 'Prend quelque chose', acheter: 'Achète au marché', se_soigner: 'Se fait soigner', prier: 'Prie',
   se_reposer: 'Se repose', flaner: 'Se promène', etudier: "Étudie à l'école", jouer: 'Joue', puiser_eau: "Puise de l'eau", emmenager: "S'installe", rien: 'Attend', avoir_un_enfant: 'Parle à quelqu’un',
 };
 const TON = { chaleureux: 'd’un ton chaleureux', tendu: 'd’un ton tendu', colere: 'avec colère', triste: 'd’un ton triste', joyeux: 'd’un ton joyeux' };
 // Les mots de l'habitant pour un objet (« une ration », « du pain », « médicaments »…) → l'objet du monde.
 function nomObjet(mot) {
-  const t = sansAccent(String(mot ?? '')).toLowerCase().trim();
+  // « du pain », « des remèdes », « une ration », « de l'eau » : on enlève l'article avant de reconnaître l'objet
+  const t = sansAccent(String(mot ?? '')).replace(/[’]/g, "'").replace(/^(?:\d+\s+|(?:de la|de l'|une|un|les|des|du|de|le|la|d'|l')(?:\s+|(?<=')))+/, '').trim();
   if (!t || t === 'rien') return null;
   if (/^(nourriture|ration|repas|pain|poisson|olive|vivre|aliment|manger|legume|fruit|farine|ble)/.test(t) || /ration/.test(t)) return 'nourriture';
   if (/^(remede|medic|soin|plante|potion)/.test(t)) return 'remedes';
@@ -100,7 +101,7 @@ export class Simulation {
     this.saisonNom = this.etatSaison.nom;
     this.navire = 0;
     this.historique = [];
-    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, salaires: 0, salairesVeille: 0, naissances: 0, deces: 0 };
+    this.stats = { paroles: 0, dons: 0, prises: 0, disputes: 0, requetes: 0, decisions: 0, achats: 0, demandes: 0, salaires: 0, salairesVeille: 0, naissances: 0, deces: 0 };
     this.derniereHeure = Math.floor(this.temps / 60);
     this.cacheRoster = null;
     this.cacheMembres = null;
@@ -757,7 +758,7 @@ export class Simulation {
     const ton = clip(d.ton, 24).toLowerCase();
     const objet = nomObjet(d.objet) || (action === 'acheter' ? 'nourriture' : null);
     const qte = clamp(Number(d.quantite) || 1, 0, 200);
-    const spec = { action, parole, ton, objet, qte, pret: !!d.pret };
+    const spec = { action, parole, ton, objet, qte, pret: !!d.pret, dispute: d.dispute === true || d.dispute === 'true' };
     const cible = d.personne ? this.personne(d.personne) : null;
     if (cible?.nourrisson && action !== 'aller') return this.invalide(v, `${cible.prenom} est un nourrisson`);
     if (v.reposJusqua > this.temps && action === 'travailler') noter(v, this.temps, 'Le conseil t’a accordé un jour de repos.');
@@ -797,12 +798,17 @@ export class Simulation {
         spec.cible = cible; spec.duree = 5;
         // déjà face à face : on parle tout de suite
         if (v.conversation && v.conversation === cible.conversation && this.proche(v, cible, 9)) {
-          this.parler(v, cible, parole, ton);
+          this.parler(v, cible, parole, ton, spec.dispute);
           this.reprendre(v, spec);
           return;
         }
         spec.res = { maison: cible.interieur ? cible.batiment : null, chez: null, cle: null, suit: cible };
         break;
+      }
+      case 'demander': {
+        if (!cible || cible === v) return this.invalide(v, 'personne de ce nom à qui demander');
+        if (!objet || objet === 'huile') return this.invalide(v, 'précise ce que tu demandes (nourriture, eau, pieces, remedes)');
+        spec.cible = cible; spec.duree = 5; spec.res = { suit: cible }; break;
       }
       case 'donner': case 'prendre': {
         if (!objet || objet === 'huile') return this.invalide(v, "précise ce que tu veux (nourriture, eau, pieces, remedes)");
@@ -830,7 +836,7 @@ export class Simulation {
         spec.res = { maison: b.id }; spec.duree = 5; break;
       }
     }
-    if (parole && !['parler', 'donner', 'prendre'].includes(action)) this.diffuser(v, parole, ton);
+    if (parole && !['parler', 'donner', 'demander', 'prendre'].includes(action)) this.diffuser(v, parole, ton);
     this.demarrer(v, spec);
   }
 
@@ -846,7 +852,7 @@ export class Simulation {
     const a = {
       type: RENDU[spec.action], action: spec.action, etat: spec.cible && spec.action !== 'parler' ? `${ETAT[spec.action]} (${spec.cible.prenom})` : spec.cible ? `${ETAT[spec.action]} (${spec.cible.prenom})` : ETAT[spec.action],
       debut: this.temps, fin: this.temps + 600, duree: spec.duree || 20,
-      cibleId: spec.cible?.id, objet: spec.objet, qte: spec.qte, pret: spec.pret, parole: spec.parole, ton: spec.ton,
+      cibleId: spec.cible?.id, objet: spec.objet, qte: spec.qte, pret: spec.pret, parole: spec.parole, ton: spec.ton, dispute: spec.dispute,
       bilan: { nourriture: 0, pieces: 0, pierre: 0, bois: 0, huile: 0, remedes: 0, paye: 0, minutes: 0 },
       nomLieu: 'ici',
     };
@@ -911,11 +917,17 @@ export class Simulation {
       case 'travailler': this.debutTravail(v, a); break;
       case 'parler': {
         const o = this.vivant(a.cibleId);
-        if (o && this.proche(v, o, 10)) this.parler(v, o, a.parole, a.ton);
+        if (o && this.proche(v, o, 10)) this.parler(v, o, a.parole, a.ton, a.dispute);
         else { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'cette personne'}.`); a.fin = this.temps; }
         break;
       }
       case 'donner': this.donner(v, a); break;
+      case 'demander': {
+        const o = this.vivant(a.cibleId);
+        if (o && this.proche(v, o, 10)) this.demanderA(v, o, a);
+        else { noter(v, this.temps, `Tu n'as pas trouvé ${o?.prenom || 'cette personne'}.`); a.fin = this.temps; }
+        break;
+      }
       case 'prendre': this.prendre(v, a); break;
       case 'acheter': this.acheter(v, a); break;
       case 'emmenager': this.emmenager(v, a); break;
@@ -927,6 +939,17 @@ export class Simulation {
       }
       default: break;
     }
+  }
+
+  // Demander quelque chose à quelqu'un : le jeu porte la demande ; c'est l'autre qui décide d'y répondre (donner, refuser, discuter).
+  demanderA(v, o, a) {
+    const q = Math.round((a.qte || 1) * 10) / 10, obj = NOMS_OBJETS[a.objet] || a.objet;
+    this.stats.demandes++;
+    noter(v, this.temps, `Tu as demandé ${q} ${obj} à ${o.prenom}.`);
+    if (a.parole) this.parler(v, o, a.parole, a.ton, a.dispute);
+    else this.alerter(o);
+    noter(o, this.temps, `${v.prenom} te demande ${q} ${obj}.`);
+    this.vivre(v, 'demande', `${q} ${obj}`, { sur: o.id });
   }
 
   // ---------- Gestes physiques ----------
@@ -1054,7 +1077,7 @@ export class Simulation {
     for (const o of ents) if (o !== sauf) noter(o, this.temps, `${v.prenom} dit${commentDit(ton)} : « ${texte} »`);
   }
 
-  parler(v, cible, texte, ton) {
+  parler(v, cible, texte, ton, dispute = false) {
     if (!texte) { noter(v, this.temps, `Tu es devant ${cible.prenom} mais tu ne dis rien.`); return; }
     let c = v.conversation && v.conversation === cible.conversation ? v.conversation : null;
     if (!c) {
@@ -1065,7 +1088,9 @@ export class Simulation {
     c.tours++;
     c.fin = this.temps + clamp(texte.length / 12, 3, 8) + 3;
     const t = sansAccent(ton || '');
-    c.dispute = t.startsWith('colere') || (t.startsWith('tendu') && c.dispute);
+    // une dispute : déclarée par l'habitant lui-même, ou reconnue à un ton de colère qu'il a choisi (furieux, énervé, agacé…)
+    const conflit = dispute || /^(colere|furieu|enerv|agac|fach|hostil|agress|irrit)/.test(t);
+    c.dispute = conflit || (t.startsWith('tendu') && c.dispute);
     v.conversation = cible.conversation = c;
     v.dir = Math.atan2(cible.x - v.x, cible.z - v.z);
     cible.dir = Math.atan2(v.x - cible.x, v.z - cible.z);
@@ -1138,7 +1163,7 @@ export class Simulation {
     noter(o, this.temps, `${v.prenom} t'a donné ${q} ${NOMS_OBJETS[obj]}${motif}.`);
     o.priorite = true;
     if (q >= 4 && obj !== 'eau') this.log(`${nomComplet(v)} donne ${q} ${NOMS_OBJETS[obj]} à ${nomComplet(o)}${motif}.`, 'bien', [v.id, o.id]);
-    if (a.parole) this.parler(v, o, a.parole, a.ton);
+    if (a.parole) this.parler(v, o, a.parole, a.ton, a.dispute);
     else if (o.statut === 'agit') { o.path = null; this.attendre(o); o.priorite = true; }
   }
 
