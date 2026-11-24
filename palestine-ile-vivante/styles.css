@@ -265,3 +265,7 @@ form.inline input { width: 64px; font: inherit; color: var(--texte); background:
 #veille-plein .carte { max-width: 420px; background: var(--fond-carte, #23211c); border: 1px solid var(--bord); border-radius: 14px; padding: 20px; text-align: left; }
 #veille-plein h2 { margin: 0 0 10px; }
 #veille-plein .petit { opacity: .7; font-size: 13px; }
+
+/* mode « regarder » : lecture seule */
+body.spectateur #vitesses, body.spectateur #veille-ecran, body.spectateur form[data-form], body.spectateur #contenu .boutons, body.spectateur #contenu .btn[data-action]:not([data-action="voir-chantier"]) { display: none !important; }
+.lien-partage { width: 100%; box-sizing: border-box; margin: 6px 0; padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.25); color: inherit; }
