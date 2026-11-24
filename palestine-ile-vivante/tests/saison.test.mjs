@@ -127,6 +127,20 @@ const nourrir = (sim) => { for (const v of sim.habitants) if (!v.nourrisson) { v
   assert.ok(pluies >= 1 && fins >= 1, 'la chronique raconte la pluie et son retrait');
 }
 
+// la vague de chaleur : courte, et jamais au beau temps ni sous la pluie (même venue d'une ancienne sauvegarde)
+{
+  const sim = nouveau(); sim.rng.chance = () => false;
+  placer(sim, 2, 30);
+  sim.meteo.secheresse = sim.temps + 2 * 1440; // ancien événement de deux jours (= une année du village)
+  sim.saisons();
+  assert.equal(sim.meteo.secheresse, 0, 'pas de vague de chaleur au beau temps');
+  placer(sim, 6, 30);
+  sim.meteo.secheresse = sim.temps + 2 * 1440;
+  sim.saisons();
+  assert.ok(sim.meteo.secheresse <= sim.temps + 8 * 60, 'en saison chaude, elle est plafonnée à 8 h de jeu (deux mois)');
+  assert.ok(sim.meteo.secheresse > sim.temps, 'mais elle existe');
+}
+
 // rechargement : pas de fausse saison, pas d'annonce en double
 {
   const sim = nouveau(); sim.rng.chance = () => false;

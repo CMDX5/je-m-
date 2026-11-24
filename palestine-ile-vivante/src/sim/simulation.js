@@ -1243,6 +1243,9 @@ export class Simulation {
   // Les saisons : le jeu change la météo et ses effets physiques ; il ne dit rien à personne.
   saisons() {
     const E = this.etatSaison;
+    // une vague de chaleur dure deux mois du village au plus (8 h de jeu) et n'existe qu'en saison chaude
+    if (this.meteo.secheresse > this.temps && (E.nom === 'pluie' || E.nom === 'beau')) this.meteo.secheresse = 0;
+    else if (this.meteo.secheresse > this.temps + 8 * 60) this.meteo.secheresse = this.temps + 8 * 60;
     if (E.nom !== this.saisonNom) {
       this.saisonNom = E.nom;
       this.log({
@@ -1326,7 +1329,7 @@ export class Simulation {
   meteoDuJour() {
     const rng = this.rng;
     if (rng.chance(0.08)) { this.meteo.tempete = this.temps + rng.range(6, 14) * 60; this.log('Une tempête se lève sur la Méditerranée.', 'evenement'); this.emit('meteo', 'tempete'); }
-    else if (['chaleur', 'seche'].includes(this.etatSaison.nom) && rng.chance(0.07)) { this.meteo.secheresse = this.temps + MIN_JOUR * 2; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
+    else if (['chaleur', 'seche'].includes(this.etatSaison.nom) && rng.chance(0.07)) { this.meteo.secheresse = this.temps + 8 * 60; this.log('Vague de chaleur : les champs souffrent.', 'evenement'); }
     else if (rng.chance(0.1)) { this.meteo.bonnePeche = this.temps + 12 * 60; this.log('Les bancs de sardines s’approchent des côtes.', 'evenement'); }
     if (!this.navire && rng.chance(0.18)) {
       this.navire = this.temps + 11 * 60;
