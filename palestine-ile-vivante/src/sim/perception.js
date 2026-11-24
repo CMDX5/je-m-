@@ -149,6 +149,7 @@ export function infosVillage(sim) {
   L.push(`- Le temps : nous sommes en ${dateDuVillage(sim.temps).texte}. Une année dure ici deux jours (un mois, quatre heures).`);
   const E = sim.etatSaison;
   L.push(E.nom === 'pluie' ? `- Saison : c'est le mois de la pluie (la seule de l'année, elle dure ${Math.max(1, Math.ceil(E.resteDePluie / 60))} h de plus).` : `- Saison : mois ${E.mois} sur 12 ; la pluie revient dans ${Math.max(1, Math.ceil(E.jusquaPluie / MOIS_MIN))} mois.`);
+  if (sim.bonus.puits) L.push('- Le puits communal remplit peu à peu les jarres des maisons.');
   L.push(`- Les habitants : ${sim.roster()}`);
   return L.join('\n');
 }

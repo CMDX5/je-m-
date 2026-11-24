@@ -59,7 +59,7 @@ export const LIEUX = {
 };
 
 export const PROJETS = {
-  puits: { nom: 'Puits communal', cout: { pierre: 40, bois: 10 }, travail: 60, effet: 'Eau potable : moins de maladies' },
+  puits: { nom: 'Puits communal', cout: { pierre: 40, bois: 10 }, travail: 60, effet: 'Eau potable : moins de maladies, et les jarres des maisons se remplissent peu à peu' },
   maison: { nom: 'Nouvelle maison', cout: { pierre: 60, bois: 30 }, travail: 110, effet: 'Une maison libre où s’installer' },
   jetee: { nom: 'Jetée agrandie', cout: { pierre: 35, bois: 35 }, travail: 80, effet: 'Deux places de pêche en plus' },
   ecole: { nom: "Agrandissement de l'école", cout: { pierre: 50, bois: 25 }, travail: 90, effet: 'Plus de place pour apprendre' },

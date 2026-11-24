@@ -1217,6 +1217,13 @@ export class Simulation {
       }[E.nom], 'evenement');
       this.emit('saison', E);
     }
+    // le puits communal alimente les maisons, en toute saison : une quinzaine de doses par jour pour quatre personnes
+    if (this.bonus.puits) {
+      for (const [id, f] of Object.entries(this.foyers)) {
+        const occ = Math.max(1, this.occupants(id));
+        f.eau = Math.min(occ * 10, f.eau + 0.15 * occ);
+      }
+    }
     if (E.pluie) {
       // les jarres des maisons se remplissent, la terre boit
       for (const [id, f] of Object.entries(this.foyers)) {

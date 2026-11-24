@@ -332,8 +332,9 @@ export class Interface {
         <p>« ${esc(r.texte)} »</p>
         <form class="parole" data-form="reponse" data-rid="${r.id}"><input name="texte" type="text" maxlength="300" placeholder="Votre réponse…" autocomplete="off"><button class="btn principal" type="submit">Répondre</button><button class="btn" type="button" data-ignorer="${r.id}">Ignorer</button></form></div>`;
     }
-    const closes = s.requetes.filter((r) => r.repondue).slice(-6).reverse();
-    if (closes.length) out += `<h3>Déjà traitées</h3>${closes.map((r) => `<div class="note">• ${esc(s.habitant(r.de).prenom)} : « ${esc(r.texte.slice(0, 90))} » — ${r.reponse ? `réponse : « ${esc(r.reponse.slice(0, 80))} »` : 'sans réponse'}</div>`).join('')}`;
+    // textes entiers : ni la demande ni la réponse ne sont coupées
+    const closes = s.requetes.filter((r) => r.repondue).slice(-8).reverse();
+    if (closes.length) out += `<h3>Déjà traitées</h3>${closes.map((r) => `<div class="carte-bloc"><div><span class="lien" data-hab="${r.de}">${esc(s.habitant(r.de).prenom)}</span> <small class="note">${esc(s.horodatage(r.t))}</small></div><p>« ${esc(r.texte)} »</p><p class="note">${r.reponse ? `<b>Votre réponse :</b> « ${esc(r.reponse)} »` : 'Sans réponse du conseil.'}</p></div>`).join('')}`;
     return out;
   }
 

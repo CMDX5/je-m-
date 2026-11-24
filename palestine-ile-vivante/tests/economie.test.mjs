@@ -29,6 +29,22 @@ const placer = (sim, mois) => { sim.temps = DEBUT_PLUIE_MIN + mois * MOIS_MIN; s
   sim.res.nourriture = 0; sim.denrees(); assert.equal(sim.res.nourriture, 0, 'jamais négatif');
 }
 
+// ---- le puits communal alimente les maisons (la demande d'eau des habitants a enfin une réponse) ----
+{
+  const sans = nouveau(), avec = nouveau();
+  placer(sans, 2); placer(avec, 2);
+  avec.bonus.puits = true;
+  for (const sim of [sans, avec]) for (const f of Object.values(sim.foyers)) f.eau = 0;
+  for (let h = 0; h < 24; h++) { sans.saisons(); avec.saisons(); }
+  const id = avec.habitants[0].foyer;
+  assert.equal(sans.foyers[id].eau, 0, 'sans puits, les jarres vides restent vides');
+  const occ = avec.occupants(id);
+  assert.ok(avec.foyers[id].eau > occ * 2.5, `avec le puits, une journée remplit bien les jarres (${avec.foyers[id].eau.toFixed(1)} doses pour ${occ} personnes)`);
+  assert.ok(avec.foyers[id].eau <= occ * 10 + 1e-6, 'dans la limite de la jarre');
+  assert.match(avec.construirePrompt(5), /puits communal remplit peu à peu/);
+  assert.ok(!/puits communal/.test(sans.construirePrompt(5)));
+}
+
 // ---- la caisse en jours de salaires ----
 {
   const sim = nouveau();
