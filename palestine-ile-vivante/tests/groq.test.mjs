@@ -168,3 +168,31 @@ console.log('En ligne : clés Groq et Gemini vérifiées, modèles choisis, limi
   globalThis.fetch = avantFetch;
   console.log('Parallèle : trois modèles différents pensent en même temps. OK');
 }
+
+// Le bilan du soir n'est jamais affamé, même quand beaucoup d'habitants attendent une décision
+{
+  const sim4 = new Simulation({ seed: 21 }).init();
+  const p4 = new PenseurGroq(sim4);
+  await p4.enregistrerCle('gsk_bonne', 'groq');
+  limites.clear(); erreurs.clear();
+  const avantFetch = globalThis.fetch;
+  let bilans = 0, decisions = 0;
+  globalThis.fetch = async (url, opt = {}) => {
+    if (url !== 'api/pensee') return avantFetch(url, opt);
+    const corps = JSON.parse(opt.body);
+    const ids = [...corps.prompt.matchAll(/=== Habitant id=(\d+) ===/g)].map((m) => Number(m[1]));
+    if (/"lecons"/.test(corps.prompt)) { bilans++; return { ok: true, status: 200, json: async () => ({ texte: JSON.stringify({ habitants: ids.map((id) => ({ id, resume: 'Un jour.', identite: 'Moi.', lecons: 'Rien encore.', questions: '' })) }) }) }; }
+    decisions++;
+    return avantFetch(url, opt);
+  };
+  for (const v of sim4.habitants.slice(0, 4)) v.bilanDu = true;
+  for (let i = 0; i < 8; i++) {
+    for (const v of sim4.habitants) if (!v.bilanDu) { v.statut = 'attend'; v.depuis = i; } // 46 habitants attendent toujours une décision
+    p4.dernierEnvoi = -1e9; p4.tick(); await attendre();
+  }
+  assert.ok(bilans >= 1, `un bilan du soir est parti malgré la file de décisions (${bilans} bilan, ${decisions} décisions)`);
+  assert.ok(decisions >= 3, 'les décisions restent prioritaires');
+  assert.equal(sim4.habitants.filter((v) => v.bilanDu).length, 0, 'les quatre habitants ont fait leur bilan');
+  globalThis.fetch = avantFetch;
+  console.log('Équité : le bilan du soir part toutes les 3 décisions quand il y en a à faire. OK');
+}

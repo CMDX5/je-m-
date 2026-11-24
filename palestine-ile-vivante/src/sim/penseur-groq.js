@@ -82,6 +82,7 @@ export class PenseurGroq {
     this.dernierEnvoi = -Infinity;
     this.entrees = []; // [{ f, m }] dans l'ordre de préférence
     this.pauses = new Map(); // "f|m" → fin de pause (performance.now)
+    this.decisionsDepuisBilan = 0;
     this.retires = []; // modèles écartés pendant la partie (pour les rapports)
     this.erreurTechnique = '';
     this.jetons = new Map(); // "f|m" → jetons estimés par envoi
@@ -180,10 +181,16 @@ export class PenseurGroq {
     const e = this.choisir(maintenant);
     if (!e) return;
     const ids = this.sim.demandes().slice(0, TAILLE_GROUPE);
-    // les décisions d'abord ; quand peu d'habitants attendent, ceux qui dorment font leur bilan du soir
-    const bilans = ids.length < 4 ? this.sim.demandesBilan().slice(0, TAILLE_BILAN) : [];
-    if (bilans.length) this.lancer(bilans, e, 'bilan');
-    else if (ids.length) this.lancer(ids, e);
+    // Les décisions d'abord, mais le bilan du soir (souvenirs, qui je suis, leçons, questions) ne doit jamais être affamé :
+    // quand peu d'habitants attendent, ou après trois groupes de décisions, ceux qui dorment font leur bilan.
+    const dus = this.sim.demandesBilan();
+    if (dus.length && (ids.length < 4 || this.decisionsDepuisBilan >= 3)) {
+      this.decisionsDepuisBilan = 0;
+      this.lancer(dus.slice(0, TAILLE_BILAN), e, 'bilan');
+    } else if (ids.length) {
+      this.decisionsDepuisBilan++;
+      this.lancer(ids, e);
+    }
   }
 
   reflechir() { /* autonome : pas de bouton */ }
